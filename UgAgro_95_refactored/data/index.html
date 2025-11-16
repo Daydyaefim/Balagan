@@ -1,0 +1,2236 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Управление теплицей</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --primary: #4CAF50;
+      --primary-dark: #388E3C;
+      --secondary: #2196F3;
+      --danger: #F44336;
+      --warning: #FF9800;
+      --info: #00BCD4;
+      --light: #F5F5F5;
+      --dark: #333;
+      --gray: #9E9E9E;
+      --border: #E0E0E0;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f0f2f5;
+      color: #333;
+      line-height: 1.6;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    header {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    h1 {
+      font-size: 2rem;
+      margin: 0;
+    }
+    
+    .connection-status {
+      background-color: rgba(255, 255, 255, 0.2);
+      padding: 8px 15px;
+      border-radius: 20px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .status-connected {
+      background-color: rgba(76, 175, 80, 0.2);
+      border: 1px solid var(--primary);
+    }
+    
+    .status-disconnected {
+      background-color: rgba(244, 67, 54, 0.2);
+      border: 1px solid var(--danger);
+    }
+    
+    .current-time {
+      font-size: 0.9rem;
+      opacity: 0.9;
+    }
+    
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+      border-bottom: 2px solid var(--border);
+    }
+    
+    .tablinks {
+      padding: 12px 24px;
+      cursor: pointer;
+      border: none;
+      background-color: transparent;
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--gray);
+      transition: all 0.3s ease;
+      position: relative;
+    }
+    
+    .tablinks:hover {
+      color: var(--dark);
+    }
+    
+    .tablinks.active {
+      color: var(--primary);
+    }
+    
+    .tablinks.active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background-color: var(--primary);
+      border-radius: 3px 3px 0 0;
+    }
+    
+    .tabcontent {
+      display: none;
+      padding: 20px;
+      background-color: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    
+    .section {
+      margin-bottom: 30px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background-color: #fafafa;
+    }
+    
+    .section-title {
+      font-size: 1.4rem;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      color: var(--dark);
+    }
+    
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: 20px;
+      text-align: center;
+      transition: transform 0.3s ease;
+    }
+    
+    .card:hover {
+      transform: translateY(-5px);
+    }
+    
+    .card-title {
+      font-size: 1.1rem;
+      margin-bottom: 10px;
+      color: var(--gray);
+    }
+    
+    .card-value {
+      font-size: 2rem;
+      font-weight: 700;
+      margin: 10px 0;
+    }
+    
+    .temp { color: #FF5722; }
+    .hum { color: #2196F3; }
+    .lux { color: #FFC107; }
+    .wind { color: #4CAF50; }
+    .rad { color: #FF9800; } /* Для солнечной радиации */
+    .ec { color: #795548; } /* Для EC мата */
+    .ph { color: #607D8B; } /* Для pH мата */
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: var(--dark);
+    }
+    
+    input, select {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 1rem;
+      transition: border-color 0.3s;
+    }
+    
+    input:focus, select:focus {
+      border-color: var(--primary);
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+    }
+    
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+    }
+    
+    .checkbox-group input {
+      width: auto;
+      margin-right: 10px;
+    }
+    
+    .radio-group {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    
+    .radio-group input[type="radio"] {
+      width: auto;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    
+    .radio-group label {
+      display: inline-flex;
+      align-items: center;
+      font-weight: 500;
+      margin-bottom: 0;
+    }
+    
+    button {
+      background-color: var(--primary);
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 500;
+      transition: background-color 0.3s;
+      margin-right: 10px;
+      margin-top: 10px;
+    }
+    
+    button:hover {
+      background-color: var(--primary-dark);
+    }
+    
+    .btn-danger {
+      background-color: var(--danger);
+    }
+    
+    .btn-danger:hover {
+      background-color: #d32f2f;
+    }
+    
+    .btn-warning {
+      background-color: var(--warning);
+    }
+    
+    .btn-warning:hover {
+      background-color: #f57c00;
+    }
+    
+    .btn-info {
+      background-color: var(--info);
+    }
+    
+    .btn-info:hover {
+      background-color: #0097a7;
+    }
+    
+    .status-on { color: var(--primary); font-weight: bold; }
+    .status-off { color: var(--danger); font-weight: bold; }
+    .status-auto { color: var(--info); font-weight: bold; }
+    .status-manual { color: var(--warning); font-weight: bold; }
+    
+    .window-button {
+      padding: 10px 20px;
+      margin: 5px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.3s;
+    }
+    
+    .window-button-enabled {
+      background-color: var(--primary);
+      color: white;
+    }
+    
+    .window-button-disabled {
+      background-color: #e0e0e0;
+      color: #9e9e9e;
+      cursor: not-allowed;
+    }
+    
+    .hidden { display: none; }
+    
+    canvas {
+      max-width: 100%;
+      height: 300px;
+      margin-top: 20px;
+    }
+    
+    .equipment-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+    }
+    
+    .equipment-card {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      padding: 15px;
+      text-align: center;
+    }
+    
+    .equipment-name {
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: var(--dark);
+    }
+    
+    .equipment-status {
+      font-size: 0.9rem;
+      margin: 5px 0;
+    }
+    
+    .chart-interval-selector {
+      margin-bottom: 15px;
+      text-align: center;
+    }
+    
+    .chart-interval-selector label {
+      margin-right: 10px;
+      font-weight: 500;
+    }
+    
+    .chart-interval-selector select {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 1rem;
+    }
+    
+    @media (max-width: 768px) {
+      .container {
+        padding: 10px;
+      }
+      
+      header {
+        flex-direction: column;
+        text-align: center;
+      }
+      
+      .tabs {
+        flex-direction: column;
+      }
+      
+      .tablinks {
+        text-align: center;
+        border-bottom: 1px solid var(--border);
+      }
+      
+      .tablinks:last-child {
+        border-bottom: none;
+      }
+      
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .radio-group {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Умная теплица</h1>
+            <div id="connection-status" class="connection-status">WiFi: Подключение... <span id="current-time" class="current-time">--:--</span></div>
+        </header>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tablinks active" onclick="openTab(event, 'dashboard')">Панель показаний</button>
+            <button class="tablinks" onclick="openTab(event, 'settings')">Настройки</button>
+            <button class="tablinks" onclick="openTab(event, 'watering')">Полив</button>
+            <button class="tablinks" onclick="openTab(event, 'fog')">Система тумана</button>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tabcontent" style="display: block;">
+            <!-- Основные параметры -->
+            <div class="section">
+                <h2 class="section-title">Основные параметры</h2>
+                <div class="grid">
+                    <div class="card">
+                        <div class="card-title">Температура</div>
+                        <div class="card-value temp"><span id="avg-temp">--.-</span>°C</div>
+                        <div>Заданно: <span id="temp-range">-- - -- °C</span></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">Влажность</div>
+                        <div class="card-value hum"><span id="avg-hum">--</span>%</div>
+                        <div>Заданно: <span id="hum-range">-- - -- %</span></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">Положение форточки</div>
+                        <div class="card-value"><span id="window-percent">0</span>%</div>
+                        <div id="window-status">Нормальная работа</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">Солнечная радиация</div>
+                        <div class="card-value rad"><span id="pyrano-value">--</span> W/m²</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">Уровень воды</div>
+                        <div class="card-value hum"><span id="water-level">--</span>%</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">Уличная температура</div>
+                        <div class="card-value temp"><span id="outdoor-temp">--.-</span>°C</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">Уличная влажность</div>
+                        <div class="card-value hum"><span id="outdoor-hum">--</span>%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Параметры мата -->
+            <div class="section">
+                <h2 class="section-title">Параметры мата</h2>
+                <div class="grid">
+                    <div class="card">
+                        <div class="card-title">Влажность мата</div>
+                        <div class="card-value hum"><span id="mat-hum">--</span>%</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">Температура мата</div>
+                        <div class="card-value temp"><span id="mat-temp">--.-</span>°C</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">EC мата</div>
+                        <div class="card-value ec"><span id="mat-ec">--.-</span> dS/m</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">pH мата</div>
+                        <div class="card-value ph"><span id="mat-ph">--.-</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Дополнительные параметры -->
+            <div class="section">
+                <h2 class="section-title">Дополнительные параметры</h2>
+                <div class="grid">
+                    <div class="card">
+                        <div class="card-title">Температура раствора</div>
+                        <div class="card-value temp"><span id="solution-temp">--.-</span>°C</div>
+                        <div>Заданно: <span id="solution-temp-range">-- - -- °C</span></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">Скорость ветра</div>
+                        <div class="card-value wind"><span id="wind-speed">--.-</span> м/с</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">Состояние оборудования</h2>
+                <div class="equipment-grid">
+                    <div class="equipment-card">
+                        <div class="equipment-name">Отопление</div>
+                        <div class="equipment-status">Статус: <span id="heating-status-text">--</span></div>
+                        <div class="equipment-status">Режим: <span id="heating-mode-text">--</span></div>
+                    </div>
+                    <div class="equipment-card">
+                        <div class="equipment-name">Вентилятор</div>
+                        <div class="equipment-status">Статус: <span id="fan-status-text">--</span></div>
+                        <div class="equipment-status">Режим: <span id="fan-mode-text">--</span></div>
+                    </div>
+                    <div class="equipment-card">
+                        <div class="equipment-name">Система тумана</div>
+                        <div class="equipment-status">Статус: <span id="fog-status-text">--</span></div>
+                        <div class="equipment-status">Режим: <span id="fog-mode-text">--</span></div>
+                    </div>
+                    <div class="equipment-card">
+                        <div class="equipment-name">Полив</div>
+                        <div class="equipment-status">Статус: <span id="watering-status-text">--</span></div>
+                        <div class="equipment-status">Режим: <span id="watering-mode-text">--</span></div>
+                    </div>
+                    <div class="equipment-card">
+                        <div class="equipment-name">Подогрев раствора</div>
+                        <div class="equipment-status">Статус: <span id="solution-heating-status-text">--</span></div>
+                        <div class="equipment-status">Режим: <span id="solution-heating-mode-text">--</span></div>
+                    </div>
+                    <div class="equipment-card">
+                        <div class="equipment-name">Гидроразмешивание</div>
+                        <div class="equipment-status">Статус: <span id="hydro-mix-status">--</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">Графики</h2>
+                <div class="chart-interval-selector">
+                    <label for="time-interval">Интервал:</label>
+                    <select id="time-interval">
+                        <option value="10min">10 минут</option>
+                        <option value="1hour" selected>1 час</option>
+                        <option value="1day">1 день</option>
+                        <option value="3days">3 дня</option>
+                    </select>
+                </div>
+                <canvas id="tempChart" width="600" height="300" style="max-width: 100%; height: auto;"></canvas>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings" class="tabcontent">
+            <div class="section">
+                <h2 class="section-title">Проветривание</h2>
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="ventilation-mode" checked>
+                    <label for="ventilation-mode">Автоматический режим</label>
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="min-temp">Мин. температура (°C):</label>
+                        <input type="number" step="0.1" id="min-temp">
+                    </div>
+                    <div class="form-group">
+                        <label for="max-temp">Макс. температура (°C):</label>
+                        <input type="number" step="0.1" id="max-temp">
+                    </div>
+                    <div class="form-group">
+                        <label for="min-hum">Мин. влажность (%):</label>
+                        <input type="number" step="0.1" id="min-hum">
+                    </div>
+                    <div class="form-group">
+                        <label for="max-hum">Макс. влажность (%):</label>
+                        <input type="number" step="0.1" id="max-hum">
+                    </div>
+                    <div class="form-group">
+                        <label for="open-time">Время открытия (мс):</label>
+                        <input type="number" id="open-time">
+                    </div>
+                    <div class="form-group">
+                        <label for="close-time">Время закрытия (мс):</label>
+                        <input type="number" id="close-time">
+                    </div>
+                </div>
+                <div id="window-controls" class="hidden">
+                    <button onclick="controlWindow('down')" id="window-down" class="window-button window-button-disabled">Вниз</button>
+                    <button onclick="controlWindow('stop')" id="window-stop" class="window-button window-button-disabled">Стоп</button>
+                    <button onclick="controlWindow('up')" id="window-up" class="window-button window-button-disabled">Вверх</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">Вентиляторы</h2>
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="fan-mode" checked>
+                    <label for="fan-mode">Автоматический режим</label>
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="fan-interval">Интервал включения (мин):</label>
+                        <input type="number" step="1" min="1" id="fan-interval">
+                    </div>
+                    <div class="form-group">
+                        <label for="fan-duration">Длительность включения (мин):</label>
+                        <input type="number" step="1" min="1" id="fan-duration">
+                    </div>
+                </div>
+                <div id="fan-control" class="hidden">
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="fan-switch">
+                        <label for="fan-switch">Принудительное включение</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">Отопление</h2>
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="heating-mode" checked>
+                    <label for="heating-mode">Автоматический режим</label>
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="heating-min-temp">Мин. температура (°C):</label>
+                        <input type="number" step="0.1" id="heating-min-temp">
+                    </div>
+                    <div class="form-group">
+                        <label for="heating-max-temp">Макс. температура (°C):</label>
+                        <input type="number" step="0.1" id="heating-max-temp">
+                    </div>
+                </div>
+                <div id="heating-control" class="hidden">
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="heating-switch">
+                        <label for="heating-switch">Принудительное включение</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">Подогрев раствора</h2>
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="solution-heating-mode" checked>
+                    <label for="solution-heating-mode">Автоматический режим</label>
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="solution-heating-min-temp">Мин. температура (°C):</label>
+                        <input type="number" step="0.1" id="solution-heating-min-temp">
+                    </div>
+                    <div class="form-group">
+                        <label for="solution-heating-max-temp">Макс. температура (°C):</label>
+                        <input type="number" step="0.1" id="solution-heating-max-temp">
+                    </div>
+                </div>
+                <div id="solution-heating-control" class="hidden">
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="solution-heating-switch">
+                        <label for="solution-heating-switch">Принудительное включение</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">Защита от ветра</h2>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="wind-threshold1">Порог 1 (м/с):</label>
+                        <input type="number" step="0.1" id="wind-threshold1">
+                    </div>
+                    <div class="form-group">
+                        <label for="wind-threshold2">Порог 2 (м/с):</label>
+                        <input type="number" step="0.1" id="wind-threshold2">
+                    </div>
+                    <div class="form-group">
+                        <label for="wind-duration">Продолжительность (мин):</label>
+                        <input type="number" step="1" min="1" id="wind-duration">
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">Ночной режим</h2>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="night-temp-offset">Смещение температуры (°C):</label>
+                        <input type="number" step="0.1" id="night-temp-offset">
+                    </div>
+                    <div class="form-group">
+                        <label for="day-start-hour">Начало дня (час):</label>
+                        <input type="number" min="0" max="23" step="1" id="day-start-hour">
+                    </div>
+                    <div class="form-group">
+                        <label for="night-start-hour">Начало ночи (час):</label>
+                        <input type="number" min="0" max="23" step="1" id="night-start-hour">
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">Калибровка датчиков</h2>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="level-min">Мин. сырое значение уровня воды (пустая бочка):</label>
+                        <input type="number" step="1" id="level-min">
+                    </div>
+                    <div class="form-group">
+                        <label for="level-max">Макс. сырое значение уровня воды (полная бочка):</label>
+                        <input type="number" step="1" id="level-max">
+                    </div>
+                </div>
+            </div>
+
+            <button id="save-settings">Сохранить настройки</button>
+        </div>
+
+        <!-- Watering Tab -->
+        <div id="watering" class="tabcontent">
+            <div class="section">
+                <h2 class="section-title">Режим полива</h2>
+                <div class="form-group">
+                    <label>Выберите режим полива:</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="watering-mode" value="0"> Авто (радиация)</label>
+                        <label><input type="radio" name="watering-mode" value="1"> Ручной (периодический)</label>
+                        <label><input type="radio" name="watering-mode" value="2"> Принудительный</label>
+                    </div>
+                </div>
+            </div>
+
+            <div id="watering-time-settings" class="section hidden">
+                <h2 class="section-title">Время полива</h2>
+                <div class="grid">
+                    <div class="form-group">
+                        <label>Начало полива:</label>
+                        <input type="number" min="0" max="23" step="1" id="watering-start-hour" style="width: 60px;"> :
+                        <input type="number" min="0" max="59" step="1" id="watering-start-minute" style="width: 60px;">
+                    </div>
+                    <div class="form-group">
+                        <label>Конец полива:</label>
+                        <input type="number" min="0" max="23" step="1" id="watering-end-hour" style="width: 60px;"> :
+                        <input type="number" min="0" max="59" step="1" id="watering-end-minute" style="width: 60px;">
+                    </div>
+                </div>
+            </div>
+
+            <div id="morning-watering-settings" class="section hidden">
+                <h2 class="section-title">Утренние поливы</h2>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="morning-watering-count">Количество:</label>
+                        <input type="number" id="morning-watering-count" min="0" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="morning-watering-interval">Интервал (мин):</label>
+                        <input type="number" id="morning-watering-interval" min="1" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="morning-watering-duration">Длительность (сек):</label>
+                        <input type="number" id="morning-watering-duration" min="1" step="1">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Auto Mode Settings -->
+            <div id="watering-auto-settings" class="section hidden">
+                <h2 class="section-title">Настройки автоматического режима</h2>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="rad-threshold">Порог радиации (МДж/м²):</label>
+                        <input type="number" step="0.1" min="0" id="rad-threshold">
+                    </div>
+                    <div class="form-group">
+                        <label for="pump-time">Длительность полива (сек):</label>
+                        <input type="number" step="1" min="1" id="pump-time">
+                    </div>
+                    <div class="form-group">
+                        <label for="max-watering-cycles">Макс. циклов в день:</label>
+                        <input type="number" step="1" min="1" id="max-watering-cycles">
+                    </div>
+                    <div class="form-group">
+                        <label for="min-watering-interval">Мин. интервал (мин):</label>
+                        <input type="number" step="1" min="1" id="min-watering-interval">
+                    </div>
+                    <div class="form-group">
+                        <label for="max-watering-interval">Макс. интервал полива (мин):</label>
+                        <input type="number" step="1" min="1" id="max-watering-interval">
+                    </div>
+                    <div class="form-group">
+                        <label for="rad-sum-reset-interval">Интервал сброса радиации (мин):</label>
+                        <input type="number" step="1" min="1" id="rad-sum-reset-interval">
+                    </div>
+                    <div class="form-group">
+                        <label for="mat-min-humidity">Мин. влажность мата (%):</label>
+                        <input type="number" step="0.1" min="0" max="100" id="mat-min-humidity">
+                    </div>
+                    <div class="form-group">
+                        <label for="mat-max-ec">Макс. EC мата (dS/m):</label>
+                        <input type="number" step="0.1" min="0" id="mat-max-ec">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Manual Mode Settings -->
+            <div id="watering-manual-settings" class="section hidden">
+                <h2 class="section-title">Настройки ручного режима</h2>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="manual-watering-interval">Интервал полива (мин):</label>
+                        <input type="number" step="1" min="1" id="manual-watering-interval">
+                    </div>
+                    <div class="form-group">
+                        <label for="manual-watering-duration">Длительность полива (сек):</label>
+                        <input type="number" step="1" min="1" id="manual-watering-duration">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Force Mode Controls -->
+            <div id="watering-force-controls" class="section hidden">
+                <h2 class="section-title">Управление принудительным режимом</h2>
+                <button id="watering-force-on" class="btn-info">Принудительно включить полив</button>
+                <button id="watering-force-off" class="btn-danger">Принудительно отключить полив</button>
+                <button id="fill-water" class="btn-warning">Набор воды</button>
+                <button id="hydro-mix" class="btn-warning">Гидроразмешивание</button>
+                <div class="form-group" style="margin-top: 15px;">
+                    <label for="hydro-mix-duration">Длительность гидроразмешивания (мин):</label>
+                    <input type="number" step="1" min="1" id="hydro-mix-duration" value="10">
+                </div>
+                <div class="form-group" style="margin-top: 15px;">
+                    <label for="forced-watering-duration">Длительность принудительного полива (сек):</label>
+                    <input type="number" step="1" min="1" id="forced-watering-duration">
+                </div>
+            </div>
+
+            <button id="save-watering" class="btn-primary">Сохранить настройки</button>
+        </div>
+  <div id="fog" class="tabcontent">
+            <div class="section">
+                <h2 class="section-title">Система тумана</h2>
+                <div class="form-group">
+                    <label>Режим работы:</label>
+                    <div class="radio-group">
+                        <label for="fog-mode-auto">
+                            <input type="radio" id="fog-mode-auto" name="fog-mode" value="0" checked> Авто
+                        </label>
+                        <label for="fog-mode-manual">
+                            <input type="radio" id="fog-mode-manual" name="fog-mode" value="1"> Ручной
+                        </label>
+                        <label for="fog-mode-forced">
+                            <input type="radio" id="fog-mode-forced" name="fog-mode" value="2"> Принудительный
+                        </label>
+                    </div>
+                </div>
+
+                <div id="fog-auto-settings" style="display: block;">
+                    <h3>Настройки автоматического режима</h3>
+                    <div class="grid">
+                        <div class="form-group">
+                            <label for="fog-min-hum">Мин. влажность (%):</label>
+                            <input type="number" step="0.1" id="fog-min-hum">
+                        </div>
+                        <div class="form-group">
+                            <label for="fog-max-hum">Макс. влажность (%):</label>
+                            <input type="number" step="0.1" id="fog-max-hum">
+                        </div>
+                        <div class="form-group">
+                            <label for="fog-min-temp">Мин. температура (°C):</label>
+                            <input type="number" step="0.1" id="fog-min-temp">
+                        </div>
+                        <div class="form-group">
+                            <label for="fog-max-temp">Макс. температура (°C):</label>
+                            <input type="number" step="0.1" id="fog-max-temp">
+                        </div>
+                        <div class="form-group">
+                            <label for="fog-min-duration">Мин. длительность (сек):</label>
+                            <input type="number" step="1" min="1" id="fog-min-duration">
+                        </div>
+                        <div class="form-group">
+                            <label for="fog-max-duration">Макс. длительность (сек):</label>
+                            <input type="number" step="1" min="1" id="fog-max-duration">
+                        </div>
+                        <div class="form-group">
+                            <label for="fog-min-interval">Мин. интервал (мин):</label>
+                            <input type="number" step="1" min="1" id="fog-min-interval">
+                        </div>
+                        <div class="form-group">
+                            <label for="fog-max-interval">Макс. интервал (мин):</label>
+                            <input type="number" step="1" min="1" id="fog-max-interval">
+                        </div>
+                        <!-- NEW: Поля для времени дня в авто-режиме -->
+                        <div class="form-group">
+                            <label for="auto-fog-day-start">Дневной старт (авто):</label>
+                            <input type="time" id="auto-fog-day-start">
+                        </div>
+                        <div class="form-group">
+                            <label for="auto-fog-day-end">Дневной конец (авто):</label>
+                            <input type="time" id="auto-fog-day-end">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="fog-morning-settings" style="display: block;">
+                    <h3>Утренний режим</h3>
+                    <div class="grid">
+                        <div class="form-group">
+                            <label for="fog-morning-start">Утренний старт:</label>
+                            <input type="time" id="fog-morning-start">
+                        </div>
+                        <div class="form-group">
+                            <label for="fog-morning-end">Утренний конец:</label>
+                            <input type="time" id="fog-morning-end">
+                        </div>
+                        <div class="form-group">
+                            <label for="fog-morning-duration">Утренняя длительность (сек):</label>
+                            <input type="number" step="1" min="1" id="fog-morning-duration">
+                        </div>
+                        <div class="form-group">
+                            <label for="fog-morning-interval">Утренний интервал (мин):</label>
+                            <input type="number" step="1" min="1" id="fog-morning-interval">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="fog-day-settings" class="hidden">
+                    <h3>Дневной режим</h3>
+                    <div class="grid">
+                        <div class="form-group">
+                            <label for="fog-day-start">Дневной старт:</label>
+                            <input type="time" id="fog-day-start">
+                        </div>
+                        <div class="form-group">
+                            <label for="fog-day-end">Дневной конец:</label>
+                            <input type="time" id="fog-day-end">
+                        </div>
+                        <div class="form-group">
+                            <label for="fog-day-duration">Дневная длительность (сек):</label>
+                            <input type="number" step="1" min="1" id="fog-day-duration">
+                        </div>
+                        <div class="form-group">
+                            <label for="fog-day-interval">Дневной интервал (мин):</label>
+                            <input type="number" step="1" min="1" id="fog-day-interval">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="fog-delay">Задержка включения (сек):</label>
+                    <input type="number" step="1" min="0" id="fog-delay">
+                </div>
+
+                <div id="fog-force-controls" class="hidden">
+                    <h3>Принудительный режим</h3>
+                    <button id="fog-force-on" class="btn-info">Принудительно включить</button>
+                    <button id="fog-force-off" class="btn-danger">Принудительно отключить</button>
+                </div>
+            </div>
+            <button id="save-fog">Сохранить настройки</button>
+        </div>
+
+        <script>
+            let tempChart;
+            let forceFogOn = false;
+            let currentInterval = '1hour'; // По умолчанию 1 час
+
+            // Простая замена для showNotification, если она не определена
+            function showNotification(message, type = 'info') {
+                alert(`[${type.toUpperCase()}] ${message}`);
+            }
+
+            // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ БЕЗОПАСНОЙ РАБОТЫ С ЭЛЕМЕНТАМИ ---
+            function setElementValue(id, value) {
+                const element = document.getElementById(id);
+                if (element) {
+                    // Для чекбоксов используем checked, для остальных value
+                    if (element.type === 'checkbox') {
+                        element.checked = value;
+                    } else {
+                        element.value = value;
+                    }
+                } else {
+                    console.warn(`[JS] Element with id '${id}' not found for setting value '${value}'.`);
+                }
+            }
+
+            function setElementChecked(id, checked) {
+                const element = document.getElementById(id);
+                if (element && element.type === 'checkbox') {
+                    element.checked = checked;
+                } else if (element) {
+                    console.warn(`[JS] Element with id '${id}' is not a checkbox.`);
+                } else {
+                    console.warn(`[JS] Checkbox with id '${id}' not found for setting checked state to '${checked}'.`);
+                }
+            }
+
+            function getElementValue(id, defaultValue = null) {
+                const element = document.getElementById(id);
+                if (element) {
+                    if (element.type === 'checkbox') {
+                        return element.checked;
+                    } else {
+                        return element.value;
+                    }
+                } else {
+                    console.warn(`[JS] Element with id '${id}' not found for getting value. Returning default.`);
+                    return defaultValue;
+                }
+            }
+            // --- КОНЕЦ ВСПОМОГАТЕЛЬНЫХ ФУНКЦИЙ ---
+
+            // Debounce-функция
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+
+            function openTab(evt, tabName) {
+                document.querySelectorAll('.tabcontent').forEach(tab => tab.style.display = 'none');
+                document.querySelectorAll('.tablinks').forEach(link => link.classList.remove('active'));
+                document.getElementById(tabName).style.display = 'block';
+                evt.currentTarget.classList.add('active');
+                if (tabName === 'dashboard') updateData();
+                if (tabName === 'settings' || tabName === 'watering' || tabName === 'fog') loadSettingsToForm();
+            }
+
+            async function updateConnectionStatus() {
+                try {
+                    const response = await fetch('/data', { timeout: 5000 });
+                    const data = await response.json();
+                    const statusElement = document.getElementById('connection-status');
+
+                    if (data.wifi) {
+                        statusElement.innerHTML = `WiFi: Подключено <span class="current-time">${formatTime(data.timestamp)}</span>`;
+                        statusElement.className = 'connection-status status-connected';
+                    } else {
+                        statusElement.innerHTML = 'WiFi: Отключено <span class="current-time">--:--</span>';
+                        statusElement.className = 'connection-status status-disconnected';
+                    }
+                } catch (error) {
+                    console.error('Error checking connection:', error);
+                    const statusElement = document.getElementById('connection-status');
+                    statusElement.innerHTML = 'WiFi: Отключено <span class="current-time">--:--</span>';
+                    statusElement.className = 'connection-status status-disconnected';
+                }
+            }
+
+            // ИСПРАВЛЕНО: Функция форматирования времени из epoch
+            function formatTime(timestamp) {
+                if (!timestamp || isNaN(timestamp)) return '--:--';
+                const date = new Date(parseInt(timestamp) * 1000); // epoch в секундах -> ms
+                const hours = date.getHours().toString().padStart(2, '0');
+                const minutes = date.getMinutes().toString().padStart(2, '0');
+                return `${hours}:${minutes}`;
+            }
+
+            async function updateData() {
+                try {
+                    const response = await fetch('/data', { timeout: 5000 });
+                    const data = await response.json();
+                    const settingsResponse = await fetch('/settings', { timeout: 5000 });
+                    const settings = await settingsResponse.json();
+
+                    // ИСПРАВЛЕНО: Добавлено обновление времени в хедере
+                    const currentTimeElement = document.getElementById('current-time');
+                    if (currentTimeElement) currentTimeElement.textContent = formatTime(data.timestamp);
+
+                    // Основные параметры
+                    const avgTempElement = document.getElementById('avg-temp');
+                    if (avgTempElement) avgTempElement.textContent = isNaN(data.avgTemp) ? 'N/A' : data.avgTemp.toFixed(1);
+                    const avgHumElement = document.getElementById('avg-hum');
+                    if (avgHumElement) avgHumElement.textContent = isNaN(data.avgHum) ? 'N/A' : data.avgHum.toFixed(0);
+                    const windowPercentElement = document.getElementById('window-percent');
+                    if (windowPercentElement) windowPercentElement.textContent = data.windowPos;
+                    const pyranoValueElement = document.getElementById('pyrano-value');
+                    if (pyranoValueElement) pyranoValueElement.textContent = isNaN(data.pyrano) ? 'N/A' : data.pyrano.toFixed(0);
+                    const waterLevelElement = document.getElementById('water-level');
+                    if (waterLevelElement) waterLevelElement.textContent = isNaN(data.waterLevel) ? 'N/A' : data.waterLevel.toFixed(0);
+                    const outdoorTempElement = document.getElementById('outdoor-temp');
+                    if (outdoorTempElement) outdoorTempElement.textContent = isNaN(data.outdoorTemp) ? 'N/A' : data.outdoorTemp.toFixed(1);
+                    const outdoorHumElement = document.getElementById('outdoor-hum');
+                    if (outdoorHumElement) outdoorHumElement.textContent = isNaN(data.outdoorHum) ? 'N/A' : data.outdoorHum.toFixed(0);
+
+                    // Параметры мата
+                    const matHumElement = document.getElementById('mat-hum');
+                    if (matHumElement) matHumElement.textContent = isNaN(data.matHum) ? 'N/A' : data.matHum.toFixed(0);
+                    const matTempElement = document.getElementById('mat-temp');
+                    if (matTempElement) matTempElement.textContent = isNaN(data.matTemp) ? 'N/A' : data.matTemp.toFixed(1);
+                    const matEcElement = document.getElementById('mat-ec');
+                    if (matEcElement) matEcElement.textContent = isNaN(data.matEC) ? 'N/A' : data.matEC.toFixed(1);
+                    const matPhElement = document.getElementById('mat-ph');
+                    if (matPhElement) matPhElement.textContent = isNaN(data.matPH) ? 'N/A' : data.matPH.toFixed(1);
+
+                    // Дополнительные параметры
+                    const solutionTempElement = document.getElementById('solution-temp');
+                    if (solutionTempElement) solutionTempElement.textContent = isNaN(data.solutionTemp) ? 'N/A' : data.solutionTemp.toFixed(1);
+                    const windSpeedElement = document.getElementById('wind-speed');
+                    if (windSpeedElement) windSpeedElement.textContent = isNaN(data.windSpeed) ? 'N/A' : data.windSpeed.toFixed(1);
+
+                    const tempRangeElement = document.getElementById('temp-range');
+                    if (tempRangeElement) tempRangeElement.textContent = `${settings.minTemp} - ${settings.maxTemp}`;
+                    const humRangeElement = document.getElementById('hum-range');
+                    if (humRangeElement) humRangeElement.textContent = `${settings.minHum} - ${settings.maxHum}`;
+                    const solutionTempRangeElement = document.getElementById('solution-temp-range');
+                    if (solutionTempRangeElement) solutionTempRangeElement.textContent = `${settings.solOn} - ${settings.solOff}`;
+
+                    updateEquipmentStatus('heating', data.isHeatingOn, !settings.manualHeat ? '<span class="status-auto">Авто</span>' : '<span class="status-manual">Ручной</span>');
+                    updateEquipmentStatus('fan', data.isFanOn, !settings.manualFan ? '<span class="status-auto">Авто</span>' : '<span class="status-manual">Ручной</span>');
+                    updateEquipmentStatus('fog', data.isFogOn, settings.fogMode === 0 ? '<span class="status-auto">Авто</span>' : settings.fogMode === 1 ? '<span class="status-manual">Ручной</span>' : '<span class="status-manual">Принудительный</span>');
+
+                    let wateringModeText;
+                    if (data.forceWateringActive) {
+                        wateringModeText = '<span class="status-manual">Принудительный</span>';
+                    } else if (data.forceWateringOverride) {
+                        wateringModeText = '<span class="status-manual">Принудительный (отключен)</span>';
+                    } else if (settings.manualPump) {
+                        wateringModeText = '<span class="status-manual">Ручной</span>';
+                    } else {
+                        wateringModeText = '<span class="status-auto">Авто</span>';
+                    }
+                    updateEquipmentStatus('watering', data.isWateringOn, wateringModeText);
+
+                    updateEquipmentStatus('solution-heating', data.isSolutionHeatingOn, !settings.manualSol ? '<span class="status-auto">Авто</span>' : '<span class="status-manual">Ручной</span>');
+
+                    forceFogOn = settings.forceFogOn;
+
+                    const hydroMixStatusElement = document.getElementById('hydro-mix-status');
+                    if (hydroMixStatusElement) hydroMixStatusElement.innerHTML = data.hydroMix ? '<span class="status-on">Вкл</span>' : '<span class="status-off">Выкл</span>';
+
+                    updateGraphs();
+                } catch (error) {
+                    console.error('Error fetching data:', error);
+                }
+            }
+
+            // ИСПРАВЛЕНО: Улучшенная функция для графиков (только температура + фильтр по интервалу)
+            // ИСПРАВЛЕНО: Оптимизированная функция updateGraphs (меньше данных, без fill, реже redraw)
+async function updateGraphs() {
+    try {
+        const response = await fetch('/history', { timeout: 5000 });
+        const result = await response.json();
+        const history = result.history || [];
+
+        console.log('[JS Debug] History length:', history.length);
+
+        if (history.length === 0) {
+            const tempCanvas = document.getElementById('tempChart');
+            if (tempCanvas) tempCanvas.style.display = 'none';
+            console.log('[JS] No history data available yet.');
+            return;
+        }
+
+        // Фильтр валидных записей (timestamp > 0, avgTemp не NaN)
+        const validHistory = history.filter(h => h.timestamp > 0 && !isNaN(h.avgTemp));
+
+        if (validHistory.length === 0) {
+            console.log('[JS] No valid history entries.');
+            return;
+        }
+
+        validHistory.sort((a, b) => a.timestamp - b.timestamp);
+
+        // ИСПРАВЛЕНО: Лимит на 12 точек (последние, чтобы график не "огромный")
+        const limitedHistory = validHistory.slice(-12);  // Только последние 12
+
+        const labels = limitedHistory.map(h => {
+            const date = new Date(h.timestamp);
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            return `${hours}:${minutes}`;
+        });
+
+        const tempData = limitedHistory.map(h => h.avgTemp);
+
+        console.log('[JS] Rendering temp chart with', limitedHistory.length, 'points');
+
+        // Temp chart (убрали fill и tension для скорости)
+        if (!tempChart) {
+            tempChart = new Chart(document.getElementById('tempChart'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Температура (°C)',
+                        data: tempData,
+                        borderColor: '#FF5722',
+                        backgroundColor: 'transparent',  // ИСПРАВЛЕНО: Без заливки (fill: false по умолчанию)
+                        tension: 0,  // ИСПРАВЛЕНО: Прямая линия, без кривизны
+                        fill: false  // Явно без заливки
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,  // ИСПРАВЛЕНО: Позволяет фиксированный размер
+                    scales: { y: { beginAtZero: false } },
+                    plugins: {
+                        legend: { display: true }
+                    },
+                    animation: false  // ИСПРАВЛЕНО: Без анимаций для скорости
+                }
+            });
+        } else {
+            // ИСПРАВЛЕНО: Проверяем изменения перед обновлением (оптимизация)
+            const dataChanged = JSON.stringify(tempChart.data.labels) !== JSON.stringify(labels) ||
+                                JSON.stringify(tempChart.data.datasets[0].data) !== JSON.stringify(tempData);
+            if (dataChanged) {
+                tempChart.data.labels = labels;
+                tempChart.data.datasets[0].data = tempData;
+                tempChart.update('quiet');  // ИСПРАВЛЕНО: 'quiet' — без анимации/перерисовки всего
+            }
+        }
+
+        // Показываем canvas
+        document.getElementById('tempChart').style.display = 'block';
+
+    } catch (error) {
+        console.error('Error updating graphs:', error);
+        if (tempChart) tempChart.canvas.style.display = 'none';
+    }
+}
+
+            // ИСПРАВЛЕНО: Обработчик смены интервала
+            const timeIntervalElement = document.getElementById('time-interval');
+            if (timeIntervalElement) {
+                timeIntervalElement.addEventListener('change', (e) => {
+                    currentInterval = e.target.value;
+                    console.log('[JS] Interval changed to:', currentInterval);
+                    updateGraphs(); // Перерисовываем график
+                });
+            } else {
+                console.warn('[JS] time-interval select not found. Graphs interval selector disabled.');
+            }
+
+            function updateEquipmentStatus(equipment, state, modeText) {
+                const statusTextElement = document.getElementById(`${equipment}-status-text`);
+                if (statusTextElement) statusTextElement.innerHTML = state ? '<span class="status-on">Вкл</span>' : '<span class="status-off">Выкл</span>';
+                const modeTextElement = document.getElementById(`${equipment}-mode-text`);
+                if (modeTextElement) modeTextElement.innerHTML = modeText;
+            }
+
+            // --- ДОБАВИТЬ В НАЧАЛО ТЕГА <script> ---
+            // Вспомогательные функции для безопасной работы с элементами
+            function safeSetElementValue(id, value) {
+                const element = document.getElementById(id);
+                if (element) {
+                    if (element.type === 'checkbox') {
+                        console.warn(`[JS] safeSetElementValue called on checkbox '${id}'. Use safeSetElementChecked.`);
+                    } else {
+                        element.value = value;
+                    }
+                } else {
+                    console.warn(`[JS] Element with id '${id}' not found for setting value '${value}'.`);
+                }
+            }
+
+            function safeSetElementChecked(id, checked) {
+                const element = document.getElementById(id);
+                if (element && element.type === 'checkbox') {
+                    element.checked = checked;
+                } else if (element) {
+                    console.warn(`[JS] Element with id '${id}' is not a checkbox.`);
+                } else {
+                    console.warn(`[JS] Checkbox with id '${id}' not found for setting checked state to '${checked}'.`);
+                }
+            }
+            // --- КОНЕЦ ВСПОМОГАТЕЛЬНЫХ ФУНКЦИЙ ---
+
+            // --- ЗАМЕНИТЬ ВАШУ ТЕКУЩУЮ loadSettingsToForm НА ЭТУ ---
+            async function loadSettingsToForm() {
+                console.log("[CALL] loadSettingsToForm function started execution");
+                try {
+                    const response = await fetch('/settings', { timeout: 5000 });
+                    const settings = await response.json();
+                    const dataResponse = await fetch('/data', { timeout: 5000 });
+                    const data = await dataResponse.json();
+
+                    // --- Ventilation ---
+                    safeSetElementChecked('ventilation-mode', !settings.manualWindow);
+                    safeSetElementValue('min-temp', settings.minTemp);
+                    safeSetElementValue('max-temp', settings.maxTemp);
+                    safeSetElementValue('min-hum', settings.minHum);
+                    safeSetElementValue('max-hum', settings.maxHum);
+                    safeSetElementValue('open-time', settings.openTime);
+                    safeSetElementValue('close-time', settings.closeTime);
+                    toggleWindowControls(settings.manualWindow);
+
+                    // --- Fan ---
+                    safeSetElementChecked('fan-mode', !settings.manualFan);
+                    safeSetElementValue('fan-interval', Math.round(settings.fanInterval / 60000));
+                    safeSetElementValue('fan-duration', Math.round(settings.fanDuration / 60000));
+                    const fanControl = document.getElementById('fan-control');
+                    if (fanControl) fanControl.style.display = settings.manualFan ? 'block' : 'none';
+                    safeSetElementChecked('fan-switch', settings.manualFan && data.isFanOn);
+
+                    // --- Heating ---
+                    safeSetElementChecked('heating-mode', !settings.manualHeat);
+                    safeSetElementValue('heating-min-temp', settings.heatOn);
+                    safeSetElementValue('heating-max-temp', settings.heatOff);
+                    const heatingControl = document.getElementById('heating-control');
+                    if (heatingControl) heatingControl.style.display = settings.manualHeat ? 'block' : 'none';
+                    safeSetElementChecked('heating-switch', settings.manualHeat && data.isHeatingOn);
+
+                    // --- Solution Heating ---
+                    safeSetElementChecked('solution-heating-mode', !settings.manualSol);
+                    safeSetElementValue('solution-heating-min-temp', settings.solOn);
+                    safeSetElementValue('solution-heating-max-temp', settings.solOff);
+                    const solutionHeatingControl = document.getElementById('solution-heating-control');
+                    if (solutionHeatingControl) solutionHeatingControl.style.display = settings.manualSol ? 'block' : 'none';
+                    safeSetElementChecked('solution-heating-switch', settings.manualSol && data.isSolutionHeatingOn);
+
+                    // --- Fog ---
+                    const fogMode = settings.fogMode;
+                    const fogModeRadio = document.querySelector(`input[name="fog-mode"][value="${fogMode}"]`);
+                    if (fogModeRadio) fogModeRadio.checked = true;
+                    const fogAutoSettings = document.getElementById('fog-auto-settings');
+                    if (fogAutoSettings) fogAutoSettings.style.display = fogMode === 0 ? 'block' : 'none';
+                    const fogMorningSettings = document.getElementById('fog-morning-settings');
+                    if (fogMorningSettings) fogMorningSettings.style.display = fogMode !== 2 ? 'block' : 'none';
+                    const fogDaySettings = document.getElementById('fog-day-settings');
+                    if (fogDaySettings) fogDaySettings.style.display = fogMode === 1 ? 'block' : 'none';
+                    const fogForceControls = document.getElementById('fog-force-controls');
+                    if (fogForceControls) fogForceControls.style.display = fogMode === 2 ? 'block' : 'none';
+
+                    safeSetElementValue('fog-morning-start', settings.fogMorningStart.toString().padStart(2, '0') + ':00');
+                    safeSetElementValue('fog-morning-end', settings.fogMorningEnd.toString().padStart(2, '0') + ':00');
+                    safeSetElementValue('fog-morning-duration', Math.round(settings.fogMorningDuration / 1000));
+                    safeSetElementValue('fog-morning-interval', Math.round(settings.fogMorningInterval / (60 * 1000)));
+                    safeSetElementValue('fog-day-start', settings.fogDayStart.toString().padStart(2, '0') + ':00');
+                    safeSetElementValue('fog-day-end', settings.fogDayEnd.toString().padStart(2, '0') + ':00');
+                    safeSetElementValue('fog-day-duration', Math.round(settings.fogDayDuration / 1000));
+                    safeSetElementValue('fog-day-interval', Math.round(settings.fogDayInterval / (60 * 1000)));
+                    safeSetElementValue('fog-delay', settings.fogDelay);
+                    safeSetElementValue('fog-min-hum', settings.fogMinHum);
+                    safeSetElementValue('fog-max-hum', settings.fogMaxHum);
+                    safeSetElementValue('fog-min-temp', settings.fogMinTemp);
+                    safeSetElementValue('fog-max-temp', settings.fogMaxTemp);
+                    safeSetElementValue('fog-min-duration', Math.round(settings.fogMinDuration / 1000));
+                    safeSetElementValue('fog-max-duration', Math.round(settings.fogMaxDuration / 1000));
+                    safeSetElementValue('fog-min-interval', Math.round(settings.fogMinInterval / (60 * 1000)));
+                    safeSetElementValue('fog-max-interval', Math.round(settings.fogMaxInterval / (60 * 1000)));
+                    // forceFogOn - глобальная переменная, не элемент формы
+                    safeSetElementValue('auto-fog-day-start', settings.autoFogDayStart.toString().padStart(2, '0') + ':00');
+                    safeSetElementValue('auto-fog-day-end', settings.autoFogDayEnd.toString().padStart(2, '0') + ':00');
+                    safeSetElementValue('level-min', settings.levelMin);
+                    safeSetElementValue('level-max', settings.levelMax);
+
+                    // --- Watering (ИСПРАВЛЕННАЯ ЛОГИКА ОПРЕДЕЛЕНИЯ РЕЖИМА С ОТЛАДКОЙ) ---
+                    console.log("[DEBUG] Raw data received in loadSettingsToForm for watering:", {
+                        forceWateringActiveRaw: data.forceWateringActive,
+                        forceWateringOverrideRaw: data.forceWateringOverride,
+                        manualPumpRaw: settings.manualPump
+                    });
+
+                    // Явно приводим к boolean
+                    const forceWateringActiveFromData = Boolean(data.forceWateringActive);
+                    const forceWateringOverrideFromData = Boolean(data.forceWateringOverride);
+                    const isManualPump = Boolean(settings.manualPump);
+
+                    console.log("[DEBUG] Parsed boolean flags:", {
+                        forceWateringActiveFromData,
+                        forceWateringOverrideFromData,
+                        isManualPump
+                    });
+
+                    let wateringModeForUI = 0; // По умолчанию Авто
+
+                    if (data.forceWateringActive) {
+                        wateringModeForUI = 2; // Принудительный (активный)
+                    } else if (data.forceWateringOverride) {
+                        wateringModeForUI = 2; // Принудительный (отключенный)
+                    } else {
+                        // Используем wateringMode из /data, если он есть, иначе определяем по manualPump
+                        if (data.wateringMode !== undefined) {
+                            wateringModeForUI = data.wateringMode;
+                        } else {
+                            // fallback на старую логику, если новый параметр отсутствует
+                            wateringModeForUI = settings.manualPump ? 1 : 0;
+                        }
+                    }
+                    console.log('[DEBUG] Final wateringModeForUI:', wateringModeForUI);
+
+                    // --- УСТАНОВКА ЗНАЧЕНИЙ ФОРМЫ ---
+                    // Установка радио-кнопки режима
+                    const modeRadios = document.querySelectorAll('input[name="watering-mode"]');
+                    modeRadios.forEach(radio => {
+                        const radioValue = parseInt(radio.value);
+                        radio.checked = (radioValue === wateringModeForUI);
+                        console.log(`[DEBUG] Setting radio value ${radioValue} to checked: ${radio.checked}`);
+                    });
+
+                    // Переключение видимости секций
+                    toggleWateringModeSections(wateringModeForUI);
+
+                    // --- ЗАПОЛНЕНИЕ ПОЛЕЙ НАСТРОЕК ---
+                    // Авто режим
+                    safeSetElementValue('rad-threshold', settings.radThreshold);
+                    safeSetElementValue('pump-time', Math.round(settings.pumpTime / 1000)); // мс -> сек
+                    safeSetElementValue('watering-start-hour', settings.wateringStartHour);
+                    safeSetElementValue('watering-start-minute', settings.wateringStartMinute);
+                    safeSetElementValue('watering-end-hour', settings.wateringEndHour);
+                    safeSetElementValue('watering-end-minute', settings.wateringEndMinute);
+                    safeSetElementValue('max-watering-cycles', settings.maxWateringCycles);
+                    safeSetElementValue('min-watering-interval', Math.round(settings.minWateringInterval / (60 * 1000))); // мс -> мин
+                    safeSetElementValue('rad-sum-reset-interval', Math.round(settings.radSumResetInterval / (60 * 1000))); // мс -> мин
+                    safeSetElementValue('mat-min-humidity', settings.matMinHumidity);
+                    safeSetElementValue('mat-max-ec', settings.matMaxEC);
+                    safeSetElementValue('max-watering-interval', Math.round(settings.maxWateringInterval / (60 * 1000)));
+
+                    // --- Ручной режим ---
+                    console.log('[JS LOAD DEBUG] Raw manual from settings:', settings.manualWateringInterval, settings.manualWateringDuration);
+                    const manualIntervalMin = Math.round(settings.manualWateringInterval || 0);  // Мин
+                    const manualDurationSec = Math.round(settings.manualWateringDuration || 0);  // Сек
+                    console.log('[JS LOAD DEBUG] Computed manual: intervalMin=', manualIntervalMin, 'durationSec=', manualDurationSec);
+
+                    safeSetElementValue('manual-watering-interval', manualIntervalMin);
+                    safeSetElementValue('manual-watering-duration', manualDurationSec);
+
+                    console.log('[JS LOAD DEBUG] After set: interval field=', document.getElementById('manual-watering-interval')?.value, 'duration field=', document.getElementById('manual-watering-duration')?.value);
+
+                    // Принудительный режим (гидро-микширование)
+                    safeSetElementValue('hydro-mix-duration', Math.round(settings.hydroMixDuration / (60 * 1000))); // мс -> мин
+                    safeSetElementValue('forced-watering-duration', Math.round(settings.forcedWateringDuration / 1000)); // мс -> сек
+
+                    // Утренние поливы
+                    safeSetElementValue('morning-watering-count', settings.morningWateringCount);
+                    safeSetElementValue('morning-watering-interval', Math.round(settings.morningWateringInterval ));
+                    safeSetElementValue('morning-watering-duration', Math.round(settings.morningWateringDuration)); 
+
+                    // --- Wind ---
+                    safeSetElementValue('wind-threshold1', settings.wind1);
+                    safeSetElementValue('wind-threshold2', settings.wind2);
+                    safeSetElementValue('wind-duration', settings.windLockMinutes);
+
+                    // --- Night Mode ---
+                    safeSetElementValue('night-temp-offset', settings.nightOffset);
+                    safeSetElementValue('day-start-hour', settings.dayStart);
+                    safeSetElementValue('night-start-hour', settings.nightStart);
+
+                    console.log(`[JS Debug] Mode after load: forceActive=${data.forceWateringActive}, override=${data.forceWateringOverride}, UI Mode=${wateringModeForUI}`);
+                    console.log('[JS] Settings loaded successfully for Watering tab');
+                } catch (error) {
+                    console.error('[JS] Error fetching settings for Watering tab:', error);
+                    // alert('Ошибка загрузки настроек полива. Проверьте соединение.');
+                }
+   
+            }
+            // --- КОНЕЦ НОВОЙ loadSettingsToForm ---
+
+            function toggleWindowControls(isManual) {
+                console.log(`Toggling window controls: ${isManual}`);
+                const buttons = ['down', 'stop', 'up'];
+                buttons.forEach(btn => {
+                    const button = document.getElementById(`window-${btn}`);
+                    if (button) {
+                        button.disabled = !isManual;
+                        button.classList.toggle('window-button-enabled', isManual);
+                        button.classList.toggle('window-button-disabled', !isManual);
+                    }
+                });
+                const windowControls = document.getElementById('window-controls');
+                if (windowControls) windowControls.style.display = isManual ? 'block' : 'none';
+            }
+
+            async function controlWindow(direction) {
+                console.log(`Sending window command: ${direction}`);
+                try {
+                    const response = await fetch('/cmd/window', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ direction })
+                    });
+                    if (response.ok) {
+                        console.log(`Command ${direction} sent successfully`);
+                        alert(`Команда отправлена: ${direction}`);
+                    } else {
+                        const errorText = await response.text();
+                        console.error(`Error response: ${errorText}, Status: ${response.status}`);
+                        alert(`Ошибка при отправке команды: ${errorText}`);
+                        throw new Error(errorText);
+                    }
+                } catch (error) {
+                    console.error('Error controlling window:', error);
+                    alert('Ошибка при отправке команды: Network error');
+                    throw error;
+                }
+            }
+
+            const debouncedControlEquipment = debounce(async (equipment, state, override = false) => {
+                try {
+                    console.log(`Controlling equipment: ${equipment} = ${state}, override: ${override}`);
+                    const response = await fetch('/cmd/equipment', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ equipment, state, override })
+                    });
+                    if (response.ok) {
+                        console.log(`Equipment ${equipment} set to ${state ? 'on' : 'off'}`);
+                        await updateData();
+                    } else {
+                        const errorText = await response.text();
+                        console.error(`Error controlling ${equipment}: ${errorText}`);
+                        throw new Error(errorText);
+                    }
+                } catch (error) {
+                    console.error(`Error controlling ${equipment}:`, error);
+                    alert(`Ошибка при управлении ${equipment}: ${error.message}`);
+                    throw error;
+                }
+            }, 300);
+
+            // Функция переключения видимости секций полива
+            function toggleWateringModeSections(mode) {
+                const autoSettings = document.getElementById('watering-auto-settings');
+                if (autoSettings) autoSettings.classList.toggle('hidden', mode !== 0);
+                const manualSettings = document.getElementById('watering-manual-settings');
+                if (manualSettings) manualSettings.classList.toggle('hidden', mode !== 1);
+                const forceControls = document.getElementById('watering-force-controls');
+                if (forceControls) forceControls.classList.toggle('hidden', mode !== 2);
+                const timeSettings = document.getElementById('watering-time-settings');
+                if (timeSettings) timeSettings.classList.toggle('hidden', mode === 2);
+                const morningSettings = document.getElementById('morning-watering-settings');
+                if (morningSettings) morningSettings.classList.toggle('hidden', mode === 2);
+            }
+
+
+
+            const debouncedSaveSettings = debounce(async () => {
+                try {
+                    // Получаем текущие настройки с сервера
+                    const currentResponse = await fetch('/settings', { timeout: 5000 });
+                    const currentSettings = await currentResponse.json();
+
+                    // Собираем обновлённые настройки из формы
+                    const updatedSettings = { ...currentSettings };
+                    console.log('[DEBUG] debouncedSaveSettings started. Current manualPump:', currentSettings.manualPump);
+
+                    // --- Ventilation ---
+                    const ventilationModeCheckbox = document.getElementById('ventilation-mode');
+                    if (ventilationModeCheckbox) updatedSettings.manualWindow = !ventilationModeCheckbox.checked;
+                    const minTempInput = document.getElementById('min-temp');
+                    if (minTempInput) {
+                        const val = parseFloat(minTempInput.value);
+                        updatedSettings.minTemp = isNaN(val) ? currentSettings.minTemp : val;
+                    }
+                    const maxTempInput = document.getElementById('max-temp');
+                    if (maxTempInput) {
+                        const val = parseFloat(maxTempInput.value);
+                        updatedSettings.maxTemp = isNaN(val) ? currentSettings.maxTemp : val;
+                    }
+                    const minHumInput = document.getElementById('min-hum');
+                    if (minHumInput) {
+                        const val = parseFloat(minHumInput.value);
+                        updatedSettings.minHum = isNaN(val) ? currentSettings.minHum : val;
+                    }
+                    const maxHumInput = document.getElementById('max-hum');
+                    if (maxHumInput) {
+                        const val = parseFloat(maxHumInput.value);
+                        updatedSettings.maxHum = isNaN(val) ? currentSettings.maxHum : val;
+                    }
+                    const openTimeInput = document.getElementById('open-time');
+                    if (openTimeInput) {
+                        const val = parseInt(openTimeInput.value);
+                        updatedSettings.openTime = isNaN(val) ? currentSettings.openTime : val;
+                    }
+                    const closeTimeInput = document.getElementById('close-time');
+                    if (closeTimeInput) {
+                        const val = parseInt(closeTimeInput.value);
+                        updatedSettings.closeTime = isNaN(val) ? currentSettings.closeTime : val;
+                    }
+
+                    // --- Fan ---
+                    const fanModeCheckbox = document.getElementById('fan-mode');
+                    if (fanModeCheckbox) updatedSettings.manualFan = !fanModeCheckbox.checked;
+                    const fanIntervalInput = document.getElementById('fan-interval');
+                    if (fanIntervalInput) {
+                        const val = parseInt(fanIntervalInput.value);
+                        updatedSettings.fanInterval = isNaN(val) ? currentSettings.fanInterval : (val * 60000);
+                    }
+                    const fanDurationInput = document.getElementById('fan-duration');
+                    if (fanDurationInput) {
+                        const val = parseInt(fanDurationInput.value);
+                        updatedSettings.fanDuration = isNaN(val) ? currentSettings.fanDuration : (val * 60000);
+                    }
+
+                    // --- Калибровка датчиков уровня воды ---
+                    const levelMinInput = document.getElementById('level-min');
+                    if (levelMinInput) {
+                        const val = parseInt(levelMinInput.value);
+                        updatedSettings.levelMin = isNaN(val) ? currentSettings.levelMin : val;
+                    }
+
+                    const levelMaxInput = document.getElementById('level-max');
+                    if (levelMaxInput) {
+                        const val = parseInt(levelMaxInput.value);
+                        updatedSettings.levelMax = isNaN(val) ? currentSettings.levelMax : val;
+                    }
+
+
+                    // --- Heating ---
+                    const heatingModeCheckbox = document.getElementById('heating-mode');
+                    if (heatingModeCheckbox) updatedSettings.manualHeat = !heatingModeCheckbox.checked;
+                    const heatingMinTempInput = document.getElementById('heating-min-temp');
+                    if (heatingMinTempInput) {
+                        const val = parseFloat(heatingMinTempInput.value);
+                        updatedSettings.heatOn = isNaN(val) ? currentSettings.heatOn : val;
+                    }
+                    const heatingMaxTempInput = document.getElementById('heating-max-temp');
+                    if (heatingMaxTempInput) {
+                        const val = parseFloat(heatingMaxTempInput.value);
+                        updatedSettings.heatOff = isNaN(val) ? currentSettings.heatOff : val;
+                    }
+
+                    // --- Solution Heating ---
+                    const solutionHeatingModeCheckbox = document.getElementById('solution-heating-mode');
+                    if (solutionHeatingModeCheckbox) updatedSettings.manualSol = !solutionHeatingModeCheckbox.checked;
+                    const solutionHeatingMinTempInput = document.getElementById('solution-heating-min-temp');
+                    if (solutionHeatingMinTempInput) {
+                        const val = parseFloat(solutionHeatingMinTempInput.value);
+                        updatedSettings.solOn = isNaN(val) ? currentSettings.solOn : val;
+                    }
+                    const solutionHeatingMaxTempInput = document.getElementById('solution-heating-max-temp');
+                    if (solutionHeatingMaxTempInput) {
+                        const val = parseFloat(solutionHeatingMaxTempInput.value);
+                        updatedSettings.solOff = isNaN(val) ? currentSettings.solOff : val;
+                    }
+
+                    // --- Fog ---
+                    const fogModeElement = document.querySelector('input[name="fog-mode"]:checked');
+                    if (fogModeElement) updatedSettings.fogMode = parseInt(fogModeElement.value);
+                    const fogMorningStartInput = document.getElementById('fog-morning-start');
+                    if (fogMorningStartInput) {
+                        const val = parseInt(fogMorningStartInput.value.split(':')[0]);
+                        updatedSettings.fogMorningStart = isNaN(val) ? currentSettings.fogMorningStart : val;
+                    }
+                    const fogMorningEndInput = document.getElementById('fog-morning-end');
+                    if (fogMorningEndInput) {
+                        const val = parseInt(fogMorningEndInput.value.split(':')[0]);
+                        updatedSettings.fogMorningEnd = isNaN(val) ? currentSettings.fogMorningEnd : val;
+                    }
+                    const fogMorningDurationInput = document.getElementById('fog-morning-duration');
+                    if (fogMorningDurationInput) {
+                        const val = parseInt(fogMorningDurationInput.value);
+                        updatedSettings.fogMorningDuration = isNaN(val) ? currentSettings.fogMorningDuration : (val * 1000);
+                    }
+                    const fogMorningIntervalInput = document.getElementById('fog-morning-interval');
+                    if (fogMorningIntervalInput) {
+                        const val = parseInt(fogMorningIntervalInput.value);
+                        updatedSettings.fogMorningInterval = isNaN(val) ? currentSettings.fogMorningInterval : (val * 60 * 1000);
+                    }
+                    const fogDayStartInput = document.getElementById('fog-day-start');
+                    if (fogDayStartInput) {
+                        const val = parseInt(fogDayStartInput.value.split(':')[0]);
+                        updatedSettings.fogDayStart = isNaN(val) ? currentSettings.fogDayStart : val;
+                    }
+                    const fogDayEndInput = document.getElementById('fog-day-end');
+                    if (fogDayEndInput) {
+                        const val = parseInt(fogDayEndInput.value.split(':')[0]);
+                        updatedSettings.fogDayEnd = isNaN(val) ? currentSettings.fogDayEnd : val;
+                    }
+                    const fogDayDurationInput = document.getElementById('fog-day-duration');
+                    if (fogDayDurationInput) {
+                        const val = parseInt(fogDayDurationInput.value);
+                        updatedSettings.fogDayDuration = isNaN(val) ? currentSettings.fogDayDuration : (val * 1000);
+                    }
+                    const fogDayIntervalInput = document.getElementById('fog-day-interval');
+                    if (fogDayIntervalInput) {
+                        const val = parseInt(fogDayIntervalInput.value);
+                        updatedSettings.fogDayInterval = isNaN(val) ? currentSettings.fogDayInterval : (val * 60 * 1000);
+                    }
+                    const fogDelayInput = document.getElementById('fog-delay');
+                    if (fogDelayInput) {
+                        const val = parseInt(fogDelayInput.value);
+                        updatedSettings.fogDelay = isNaN(val) ? currentSettings.fogDelay : val;
+                    }
+                    const fogMinHumInput = document.getElementById('fog-min-hum');
+                    if (fogMinHumInput) {
+                        const val = parseFloat(fogMinHumInput.value);
+                        updatedSettings.fogMinHum = isNaN(val) ? currentSettings.fogMinHum : val;
+                    }
+                    const fogMaxHumInput = document.getElementById('fog-max-hum');
+                    if (fogMaxHumInput) {
+                        const val = parseFloat(fogMaxHumInput.value);
+                        updatedSettings.fogMaxHum = isNaN(val) ? currentSettings.fogMaxHum : val;
+                    }
+                    const fogMinTempInput = document.getElementById('fog-min-temp');
+                    if (fogMinTempInput) {
+                        const val = parseFloat(fogMinTempInput.value);
+                        updatedSettings.fogMinTemp = isNaN(val) ? currentSettings.fogMinTemp : val;
+                    }
+                    const fogMaxTempInput = document.getElementById('fog-max-temp');
+                    if (fogMaxTempInput) {
+                        const val = parseFloat(fogMaxTempInput.value);
+                        updatedSettings.fogMaxTemp = isNaN(val) ? currentSettings.fogMaxTemp : val;
+                    }
+                    const fogMinDurationInput = document.getElementById('fog-min-duration');
+                    if (fogMinDurationInput) {
+                        const val = parseInt(fogMinDurationInput.value);
+                        updatedSettings.fogMinDuration = isNaN(val) ? currentSettings.fogMinDuration : (val * 1000);
+                    }
+                    const fogMaxDurationInput = document.getElementById('fog-max-duration');
+                    if (fogMaxDurationInput) {
+                        const val = parseInt(fogMaxDurationInput.value);
+                        updatedSettings.fogMaxDuration = isNaN(val) ? currentSettings.fogMaxDuration : (val * 1000);
+                    }
+                    const fogMinIntervalInput = document.getElementById('fog-min-interval');
+                    if (fogMinIntervalInput) {
+                        const val = parseInt(fogMinIntervalInput.value);
+                        updatedSettings.fogMinInterval = isNaN(val) ? currentSettings.fogMinInterval : (val * 60 * 1000);
+                    }
+                    const fogMaxIntervalInput = document.getElementById('fog-max-interval');
+                    if (fogMaxIntervalInput) {
+                        const val = parseInt(fogMaxIntervalInput.value);
+                        updatedSettings.fogMaxInterval = isNaN(val) ? currentSettings.fogMaxInterval : (val * 60 * 1000);
+                    }
+                    const autoFogDayStartInput = document.getElementById('auto-fog-day-start');
+                    if (autoFogDayStartInput) {
+                        const val = parseInt(autoFogDayStartInput.value.split(':')[0]);
+                        updatedSettings.autoFogDayStart = isNaN(val) ? currentSettings.autoFogDayStart : val;
+                    }
+                    const autoFogDayEndInput = document.getElementById('auto-fog-day-end');
+                    if (autoFogDayEndInput) {
+                        const val = parseInt(autoFogDayEndInput.value.split(':')[0]);
+                        updatedSettings.autoFogDayEnd = isNaN(val) ? currentSettings.autoFogDayEnd : val;
+                    }
+
+                    // --- Watering (НОВАЯ ЛОГИКА) ---
+                    // Определяем режим полива по состоянию радио-кнопок
+                    const wateringModeElement = document.querySelector('input[name="watering-mode"]:checked');
+                    const wateringMode = wateringModeElement ? parseInt(wateringModeElement.value) : (currentSettings.manualPump ? 1 : 0); // Дефолт или из текущих настроек
+
+                    updatedSettings.wateringMode = wateringMode;
+                    // manualPump сохраняем для обратной совместимости и как флаг "on/off" в ручном режиме
+                    updatedSettings.manualPump = (wateringMode === 1);
+                    console.log('[DEBUG] Determined watering mode:', wateringMode, 'Setting manualPump to:', updatedSettings.manualPump);
+                    // Авто режим
+                    const radThresholdInput = document.getElementById('rad-threshold');
+                    if (radThresholdInput) {
+                        const val = parseFloat(radThresholdInput.value);
+                        updatedSettings.radThreshold = isNaN(val) ? currentSettings.radThreshold : val;
+                    }
+
+                    const pumpTimeInput = document.getElementById('pump-time');
+                    if (pumpTimeInput) {
+                        const val = parseInt(pumpTimeInput.value);
+                        updatedSettings.pumpTime = isNaN(val) ? currentSettings.pumpTime : (val * 1000); // сек -> мс
+                    }
+
+                    const wateringStartHourInput = document.getElementById('watering-start-hour');
+                    if (wateringStartHourInput) {
+                        const val = parseInt(wateringStartHourInput.value);
+                        updatedSettings.wateringStartHour = isNaN(val) ? currentSettings.wateringStartHour : val;
+                    }
+
+                    const wateringStartMinuteInput = document.getElementById('watering-start-minute');
+                    if (wateringStartMinuteInput) {
+                        const val = parseInt(wateringStartMinuteInput.value);
+                        updatedSettings.wateringStartMinute = isNaN(val) ? currentSettings.wateringStartMinute : val;
+                    }
+
+                    const wateringEndHourInput = document.getElementById('watering-end-hour');
+                    if (wateringEndHourInput) {
+                        const val = parseInt(wateringEndHourInput.value);
+                        updatedSettings.wateringEndHour = isNaN(val) ? currentSettings.wateringEndHour : val;
+                    }
+
+                    const wateringEndMinuteInput = document.getElementById('watering-end-minute');
+                    if (wateringEndMinuteInput) {
+                        const val = parseInt(wateringEndMinuteInput.value);
+                        updatedSettings.wateringEndMinute = isNaN(val) ? currentSettings.wateringEndMinute : val;
+                    }
+
+                    const maxWateringCyclesInput = document.getElementById('max-watering-cycles');
+                    if (maxWateringCyclesInput) {
+                        const val = parseInt(maxWateringCyclesInput.value);
+                        updatedSettings.maxWateringCycles = isNaN(val) ? currentSettings.maxWateringCycles : val;
+                    }
+
+                    const minWateringIntervalInput = document.getElementById('min-watering-interval');
+                    if (minWateringIntervalInput) {
+                        const val = parseInt(minWateringIntervalInput.value);
+                        updatedSettings.minWateringInterval = isNaN(val) ? currentSettings.minWateringInterval : (val * 60 * 1000); // мин -> мс
+                    }
+
+                    const radSumResetIntervalInput = document.getElementById('rad-sum-reset-interval');
+                    if (radSumResetIntervalInput) {
+                        const val = parseInt(radSumResetIntervalInput.value);
+                        updatedSettings.radSumResetInterval = isNaN(val) ? currentSettings.radSumResetInterval : (val * 60 * 1000); // мин -> мс
+                    }
+
+                    const matMinHumidityInput = document.getElementById('mat-min-humidity');
+                    if (matMinHumidityInput) {
+                        const val = parseFloat(matMinHumidityInput.value);
+                        updatedSettings.matMinHumidity = isNaN(val) ? currentSettings.matMinHumidity : val;
+                    }
+
+                    const matMaxECInput = document.getElementById('mat-max-ec');
+                    if (matMaxECInput) {
+                        const val = parseFloat(matMaxECInput.value);
+                        updatedSettings.matMaxEC = isNaN(val) ? currentSettings.matMaxEC : val;
+                    }
+
+                    const maxWateringIntervalInput = document.getElementById('max-watering-interval');
+                    if (maxWateringIntervalInput) {
+                        const val = parseInt(maxWateringIntervalInput.value);
+                        updatedSettings.maxWateringInterval = isNaN(val) ? currentSettings.maxWateringInterval : (val * 60 * 1000);
+                    }
+                      
+
+                    // Ручной режим
+                    const manualWateringIntervalInput = document.getElementById('manual-watering-interval');
+                    if (manualWateringIntervalInput) {
+                        const val = parseInt(manualWateringIntervalInput.value);
+                        updatedSettings.manualWateringInterval = isNaN(val) ? currentSettings.manualWateringInterval : (val * 60 * 1000); // мин -> мс
+                    }
+
+                    const manualWateringDurationInput = document.getElementById('manual-watering-duration');
+                    if (manualWateringDurationInput) {
+                        const val = parseInt(manualWateringDurationInput.value);
+                        updatedSettings.manualWateringDuration = isNaN(val) ? currentSettings.manualWateringDuration : (val * 1000); // сек -> мс
+                    }
+
+                    // Принудительный режим (гидро-микширование)
+                    const hydroMixDurationInput = document.getElementById('hydro-mix-duration');
+                    if (hydroMixDurationInput) {
+                        const val = parseInt(hydroMixDurationInput.value);
+                        updatedSettings.hydroMixDuration = isNaN(val) ? currentSettings.hydroMixDuration : (val * 60 * 1000); // мин -> мс
+                    }
+
+                    const forcedWateringDurationInput = document.getElementById('forced-watering-duration');
+                    if (forcedWateringDurationInput) {
+                        const val = parseInt(forcedWateringDurationInput.value);
+                        updatedSettings.forcedWateringDuration = isNaN(val) ? currentSettings.forcedWateringDuration : (val * 1000); // сек -> мс
+                    }
+
+                    // Утренние поливы
+                    const morningWateringCountInput = document.getElementById('morning-watering-count');
+                    if (morningWateringCountInput) {
+                        const val = parseInt(morningWateringCountInput.value);
+                        updatedSettings.morningWateringCount = isNaN(val) ? currentSettings.morningWateringCount : val;
+                    }
+
+                    const morningWateringIntervalInput = document.getElementById('morning-watering-interval');
+                    if (morningWateringIntervalInput) {
+                        const val = parseInt(morningWateringIntervalInput.value);
+                        updatedSettings.morningWateringInterval = isNaN(val) ? currentSettings.morningWateringInterval : (val * 60 * 1000); // мин -> мс
+                    }
+
+                    const morningWateringDurationInput = document.getElementById('morning-watering-duration');
+                    if (morningWateringDurationInput) {
+                        const val = parseInt(morningWateringDurationInput.value);
+                        updatedSettings.morningWateringDuration = isNaN(val) ? currentSettings.morningWateringDuration : (val * 1000); // сек -> мс
+                    }
+
+                    // --- КОНЕЦ НОВОЙ ЛОГИКИ СОХРАНЕНИЯ НАСТРОЕК ПОЛИВА ---
+
+                    // --- Wind ---
+                    const windThreshold1Input = document.getElementById('wind-threshold1');
+                    if (windThreshold1Input) {
+                        const val = parseFloat(windThreshold1Input.value);
+                        updatedSettings.wind1 = isNaN(val) ? currentSettings.wind1 : val;
+                    }
+                    const windThreshold2Input = document.getElementById('wind-threshold2');
+                    if (windThreshold2Input) {
+                        const val = parseFloat(windThreshold2Input.value);
+                        updatedSettings.wind2 = isNaN(val) ? currentSettings.wind2 : val;
+                    }
+                    const windDurationInput = document.getElementById('wind-duration');
+                    if (windDurationInput) {
+                        const val = parseInt(windDurationInput.value);
+                        updatedSettings.windLockMinutes = isNaN(val) ? currentSettings.windLockMinutes : val;
+                    }
+
+                    // --- Night Mode ---
+                    const nightTempOffsetInput = document.getElementById('night-temp-offset');
+                    if (nightTempOffsetInput) {
+                        const val = parseFloat(nightTempOffsetInput.value);
+                        updatedSettings.nightOffset = isNaN(val) ? currentSettings.nightOffset : val;
+                    }
+                    const dayStartHourInput = document.getElementById('day-start-hour');
+                    if (dayStartHourInput) {
+                        const val = parseInt(dayStartHourInput.value);
+                        updatedSettings.dayStart = isNaN(val) ? currentSettings.dayStart : val;
+                    }
+                    const nightStartHourInput = document.getElementById('night-start-hour');
+                    if (nightStartHourInput) {
+                        const val = parseInt(nightStartHourInput.value);
+                        updatedSettings.nightStart = isNaN(val) ? currentSettings.nightStart : val;
+                    }
+
+                    // Проверяем, изменились ли настройки
+                    if (JSON.stringify(updatedSettings) === JSON.stringify(currentSettings)) {
+                        console.log('[JS] No changes in settings, skipping save');
+                        return;
+                    }
+
+                    console.log('[JS] Saving settings:', JSON.stringify(updatedSettings));
+
+                    // Отправляем обновлённые настройки на сервер
+                    const saveResponse = await fetch('/settings', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(updatedSettings)
+                    });
+
+                    if (!saveResponse.ok) {
+                        const errorText = await saveResponse.text();
+                        throw new Error(`HTTP error! status: ${saveResponse.status}, message: ${errorText}`);
+                    }
+
+                    const result = await saveResponse.json();
+                    console.log('[JS] Settings saved:', result);
+                    showNotification('Настройки успешно сохранены!', 'success');
+
+                } catch (error) {
+                    console.error('[JS] Error saving settings:', error);
+                    showNotification(`Ошибка при сохранении настроек: ${error.message}`, 'error');
+                }
+            }, 500); // Debounce 500ms
+
+            document.getElementById('ventilation-mode').addEventListener('change', async e => {
+                const isAuto = e.target.checked;
+                console.log(`Setting ventilation mode: ${isAuto ? 'auto' : 'manual'}`);
+                toggleWindowControls(!isAuto);
+                if (isAuto) {
+                    try {
+                        await controlWindow('stop');
+                    } catch (error) {
+                        console.error('Error stopping window:', error);
+                        document.getElementById('ventilation-mode').checked = false;
+                    }
+                }
+                await debouncedSaveSettings();
+            });
+
+
+            // Обработчик изменения режима полива
+            document.querySelectorAll('input[name="watering-mode"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    const selectedMode = parseInt(e.target.value);
+                    console.log(`[JS] Watering mode changed to: ${selectedMode}`);
+                    // Переключаем видимость секций в соответствии с новым режимом
+                    toggleWateringModeSections(selectedMode);
+                    // Сохраняем настройки (wateringMode)
+                    debouncedSaveSettings();
+                });
+            });
+
+            document.querySelectorAll('input[name="fog-mode"]').forEach(radio => {
+                radio.addEventListener('change', async () => {
+                    const fogMode = parseInt(document.querySelector('input[name="fog-mode"]:checked').value);
+                    console.log(`Setting fog mode: ${fogMode === 0 ? 'auto' : fogMode === 1 ? 'manual' : 'forced'}`);
+                    const fogAutoSettings = document.getElementById('fog-auto-settings');
+                    if (fogAutoSettings) fogAutoSettings.style.display = fogMode === 0 ? 'block' : 'none';
+                    const fogMorningSettings = document.getElementById('fog-morning-settings');
+                    if (fogMorningSettings) fogMorningSettings.style.display = fogMode === 2 ? 'none' : 'block';
+                    const fogDaySettings = document.getElementById('fog-day-settings');
+                    if (fogDaySettings) fogDaySettings.style.display = fogMode === 1 ? 'block' : 'none';
+                    const fogForceControls = document.getElementById('fog-force-controls');
+                    if (fogForceControls) fogForceControls.style.display = fogMode === 2 ? 'block' : 'none';
+                    forceFogOn = false;
+                    try {
+                        await debouncedControlEquipment(fogMode === 0 ? 'fog-mode-auto' : fogMode === 1 ? 'fog-mode-manual' : 'fog-mode-forced', false);
+                        await debouncedSaveSettings();
+                        await updateData();
+                    } catch (error) {
+                        console.error('Error setting fog mode:', error);
+                    }
+                });
+            });
+
+            document.getElementById('fog-force-on').addEventListener('click', async () => {
+                try {
+                    forceFogOn = true;
+                    await debouncedControlEquipment('fog-mode-forced', true);
+                    await debouncedSaveSettings();
+                    await updateData();
+                    alert('Туман принудительно включен');
+                } catch (error) {
+                    console.error('Error forcing fog on:', error);
+                    forceFogOn = false;
+                }
+            });
+
+            document.getElementById('fog-force-off').addEventListener('click', async () => {
+                try {
+                    forceFogOn = false;
+                    await debouncedControlEquipment('fog-mode-forced', false);
+                    await debouncedSaveSettings();
+                    await updateData();
+                    alert('Туман принудительно отключен');
+                } catch (error) {
+                    console.error('Error forcing fog off:', error);
+                    forceFogOn = true;
+                }
+            });
+
+            ['fan', 'heating', 'solution-heating'].forEach(eq => {
+                const modeCheckbox = document.getElementById(`${eq}-mode`);
+                const switchCheckbox = document.getElementById(`${eq}-switch`);
+                const controlSection = document.getElementById(`${eq}-control`);
+                if (modeCheckbox) {
+                    modeCheckbox.addEventListener('change', async e => {
+                        const isAuto = e.target.checked;
+                        console.log(`Setting ${eq} mode: ${isAuto ? 'auto' : 'manual'}`);
+                        if (isAuto) {
+                            if (switchCheckbox) switchCheckbox.checked = false;
+                            if (controlSection) controlSection.style.display = 'none';
+                            try {
+                                await debouncedControlEquipment(eq, false);
+                                await debouncedSaveSettings(); // Сохраняем режим (manual/auto)
+                            } catch (error) {
+                                console.error(`Error turning off ${eq}:`, error);
+                                if (switchCheckbox) switchCheckbox.checked = true;
+                                return;
+                            }
+                        } else {
+                            if (controlSection) controlSection.style.display = 'block';
+                            try {
+                                await debouncedControlEquipment(eq, false);
+                                await debouncedSaveSettings(); // Сохраняем режим (manual/auto)
+                            } catch (error) {
+                                console.error(`Error turning off ${eq} in manual mode:`, error);
+                                modeCheckbox.checked = true;
+                                if (controlSection) controlSection.style.display = 'none';
+                                return;
+                            }
+                        }
+                    });
+                }
+
+
+                if (switchCheckbox) {
+                    switchCheckbox.addEventListener('change', async e => {
+                        const isOn = e.target.checked;
+                        console.log(`Setting ${eq} switch: ${isOn ? 'on' : 'off'}`);
+                        if (isOn) {
+                            modeCheckbox.checked = false;
+                            if (controlSection) controlSection.style.display = 'block';
+                        }
+                        try {
+                            await debouncedControlEquipment(eq, isOn);
+                            // Убираем debouncedSaveSettings, так как сохранение происходит на сервере
+                            await updateData();
+                        } catch (error) {
+                            console.error(`Error controlling ${eq}:`, error);
+                            switchCheckbox.checked = !isOn;
+                        }
+                    });
+                }
+            });
+
+            // --- Обработчик для watering-force-on (ИСПРАВЛЕНО: добавлена длительность) ---
+            const wateringForceOnButton = document.getElementById('watering-force-on');
+            if (wateringForceOnButton) {
+                wateringForceOnButton.addEventListener('click', async () => {
+                    try {
+                        const forcedDurationInput = document.getElementById('forced-watering-duration');
+                        const durationSec = parseInt(forcedDurationInput ? forcedDurationInput.value : '60') || 60;
+                        const durationMs = durationSec * 1000;
+
+                        // Отправляем POST запрос на /cmd/watering с JSON телом
+                        const response = await fetch(`/cmd/watering`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ command: 'force-on', duration: durationMs }) // Команда и длительность в теле
+                        });
+
+                        if (!response.ok) {
+                            // Попытка получить текст ошибки от сервера
+                            let errorText = 'Неизвестная ошибка';
+                            try {
+                                const errorData = await response.json();
+                                errorText = errorData.error || `Ошибка ${response.status}`;
+                            } catch (e) {
+                                errorText = await response.text();
+                            }
+                            throw new Error(errorText);
+                        }
+
+                        const data = await response.json();
+                        console.log('[JS] Force watering ON command sent:', data);
+                        // Используем alert вместо showNotification
+                        alert(`Команда "Принудительно включить полив" на ${durationSec} сек отправлена`);
+                        // Обновляем данные, чтобы отразить изменения
+                        await updateData();
+                    } catch (error) {
+                        console.error('[JS] Error sending force watering ON command:', error);
+                        alert(`Ошибка: ${error.message}`);
+                    }
+                });
+            }
+            // --- Конец обработчика ---
+
+            // --- Исправленный обработчик для watering-force-off ---
+            const wateringForceOffButton = document.getElementById('watering-force-off');
+            if (wateringForceOffButton) {
+                wateringForceOffButton.addEventListener('click', async () => {
+                    try {
+                        // Отправляем POST запрос на /cmd/watering с JSON телом
+                        const response = await fetch(`/cmd/watering`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ command: 'force-off' }) // Команда в теле
+                        });
+
+                        if (!response.ok) {
+                            // Попытка получить текст ошибки от сервера
+                            let errorText = 'Неизвестная ошибка';
+                            try {
+                                const errorData = await response.json();
+                                errorText = errorData.error || `Ошибка ${response.status}`;
+                            } catch (e) {
+                                // Если не JSON, пробуем получить текст
+                                errorText = await response.text();
+                            }
+                            throw new Error(errorText);
+                        }
+
+                        const data = await response.json();
+                        console.log('[JS] Force watering OFF command sent:', data);
+                        // Используем alert вместо showNotification, если showNotification не определена
+                        alert('Команда "Принудительно отключить полив" отправлена');
+                        // Обновляем данные, чтобы отразить изменения
+                        await updateData();
+                    } catch (error) {
+                        console.error('[JS] Error sending force watering OFF command:', error);
+                        alert(`Ошибка: ${error.message}`);
+                    }
+                });
+            }
+            // --- Конец исправленного обработчика ---
+
+
+
+            document.getElementById('save-settings').addEventListener('click', async () => {
+                await debouncedSaveSettings();
+            });
+
+            // Обработчик кнопки "Сохранить настройки" на вкладке полива (если есть)
+            // Если кнопка общая, этот обработчик может быть не нужен
+            const saveWateringButton = document.getElementById('save-watering');
+            if (saveWateringButton) {
+                saveWateringButton.addEventListener('click', async () => {
+                    try {
+                        await debouncedSaveSettings();
+                        await updateData(); // Обновляем данные после сохранения
+                        alert('Настройки полива успешно сохранены!');
+                    } catch (error) {
+                        console.error('[JS] Error saving watering settings:', error);
+                        alert(`Ошибка при сохранении настроек полива: ${error.message}`);
+                    }
+                });
+            }
+
+            document.getElementById('save-fog').addEventListener('click', async () => {
+                await debouncedSaveSettings();
+            });
+
+            // --- Исправленный обработчик для fill-water ---
+            const fillWaterButton = document.getElementById('fill-water');
+            if (fillWaterButton) {
+                fillWaterButton.addEventListener('click', async () => {
+                    try {
+                        const response = await fetch(`/cmd/watering`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ command: 'fill' })
+                        });
+
+                        if (!response.ok) {
+                            let errorText = 'Неизвестная ошибка';
+                            try {
+                                const errorData = await response.json();
+                                errorText = errorData.error || `Ошибка ${response.status}`;
+                            } catch (e) { errorText = await response.text(); }
+                            throw new Error(errorText);
+                        }
+
+                        const data = await response.json();
+                        console.log('[JS] Fill water command sent:', data);
+                        alert('Команда "Набор воды" отправлена');
+                        await updateData();
+                    } catch (error) {
+                        console.error('[JS] Error sending fill water command:', error);
+                        alert(`Ошибка: ${error.message}`);
+                    }
+                });
+            }
+            // --- Конец исправленного обработчика ---
+
+            // --- Исправленный обработчик для hydro-mix ---
+            const hydroMixButton = document.getElementById('hydro-mix');
+            if (hydroMixButton) {
+                hydroMixButton.addEventListener('click', async () => {
+                    try {
+                        const durationInput = document.getElementById('hydro-mix-duration');
+                        const durationValue = durationInput ? parseInt(durationInput.value) : 0;
+                        const duration = isNaN(durationValue) || durationValue <= 0 ? 10 : durationValue; // По умолчанию 10 минут
+
+                        const response = await fetch(`/cmd/watering`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ command: 'hydro-mix', duration: duration }) // Команда и длительность в теле
+                        });
+
+                        if (!response.ok) {
+                            let errorText = 'Неизвестная ошибка';
+                            try {
+                                const errorData = await response.json();
+                                errorText = errorData.error || `Ошибка ${response.status}`;
+                            } catch (e) { errorText = await response.text(); }
+                            throw new Error(errorText);
+                        }
+
+                        const data = await response.json();
+                        console.log('[JS] Hydro mix command sent:', data);
+                        alert(`Команда "Гидроразмешивание" на ${duration} мин. отправлена`);
+                        await updateData();
+                    } catch (error) {
+                        console.error('[JS] Error sending hydro mix command:', error);
+                        alert(`Ошибка: ${error.message}`);
+                    }
+                });
+            }
+            // --- Конец исправленного обработчика ---
+
+            // Initialize the page
+            updateConnectionStatus();
+            updateData();
+
+            // Set up periodic updates
+            setInterval(updateData, 5000);
+            setInterval(updateConnectionStatus, 10000);
+        </script>
+</body>
+</html>
