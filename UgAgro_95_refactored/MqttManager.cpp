@@ -11,7 +11,8 @@ MqttManager* MqttManager::_instance = nullptr;
 MqttManager::MqttManager(WiFiClient& wifiClient, RTC_DS3231& rtc)
   : _client(wifiClient), _rtc(rtc),
     _settingsUpdateCallback(nullptr), _commandCallback(nullptr),
-    _saveSettingsCallback(nullptr), _settings(nullptr) {
+    _saveSettingsCallback(nullptr), _settings(nullptr),
+    _dispatcher(nullptr), _allCommands(nullptr) {
   _instance = this;
 }
 
@@ -123,6 +124,11 @@ void MqttManager::handleMessage(char* topic, byte* payload, unsigned int length)
 
 // Обработка команды установки настроек
 void MqttManager::handleSetSettings(const String& json) {
+  if (!_settings || !_dispatcher) {
+    LOG("MqttManager: Settings или Dispatcher не установлены\n");
+    return;
+  }
+
   DynamicJsonDocument doc(4096);
   DeserializationError error = deserializeJson(doc, json);
 
@@ -131,11 +137,21 @@ void MqttManager::handleSetSettings(const String& json) {
     return;
   }
 
-  // Здесь должна быть логика обновления настроек
-  // В полной реализации нужно обработать все поля из документа
-  // и вызвать callback для сохранения настроек
+  // Используем CommandDispatcher для обработки всех полей
+  bool needSave = false;
+  int executedCount = _dispatcher->processDocument(doc, needSave);
 
-  LOG("MqttManager: Настройки получены из MQTT (требуется полная реализация обработки)\n");
+  LOG("MqttManager: Обработано %d команд из set_settings\n", executedCount);
+
+  // Сохранение настроек если были изменения
+  if (needSave && _saveSettingsCallback) {
+    _saveSettingsCallback("MQTT_set_settings");
+  }
+
+  // Публикация обновленных настроек
+  if (needSave && _settings) {
+    publishSettings(*_settings);
+  }
 }
 
 // Обработка команд
@@ -325,6 +341,14 @@ void MqttManager::setSaveSettingsCallback(SaveSettingsCallback callback) {
 
 void MqttManager::setSettingsReference(Settings* settings) {
   _settings = settings;
+}
+
+// Установка внешнего CommandDispatcher
+void MqttManager::setCommandDispatcher(CommandDispatcher* dispatcher) {
+  _dispatcher = dispatcher;
+  // Не создаем AllCommands, так как он создается глобально
+  _allCommands = nullptr;
+  LOG("MqttManager: Using external CommandDispatcher\n");
 }
 
 // ===========================

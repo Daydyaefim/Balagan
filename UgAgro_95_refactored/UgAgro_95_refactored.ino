@@ -23,6 +23,8 @@
 #include "MqttManager.h"
 #include "Storage.h"
 #include "ControlLogic.h"
+#include "commands/CommandDispatcher.h"
+#include "commands/AllCommands.h"
 
 // ===========================
 // ГЛОБАЛЬНЫЕ ОБЪЕКТЫ
@@ -53,6 +55,10 @@ ActuatorManager* actuatorManager = nullptr;
 MqttManager* mqttManager = nullptr;
 StorageManager* storageManager = nullptr;
 GreenhouseController* controller = nullptr;
+
+// Command Pattern для обработки настроек
+CommandDispatcher* commandDispatcher = nullptr;
+AllCommands* allCommands = nullptr;
 
 // Задачи FreeRTOS
 TaskHandle_t networkTimeTaskHandle = NULL;
@@ -135,6 +141,14 @@ void setup() {
 
   // Установка ссылки на настройки для MQTT
   mqttManager->setSettingsReference(&controller->getSettings());
+
+  // Инициализация CommandDispatcher для веб-сервера и MQTT
+  commandDispatcher = new CommandDispatcher(DEBUG);
+  allCommands = new AllCommands(controller->getSettings(), *commandDispatcher);
+  Serial.printf("CommandDispatcher инициализирован с %d командами\n", allCommands->getCommandCount());
+
+  // Установка CommandDispatcher для MQTT
+  mqttManager->setCommandDispatcher(commandDispatcher);
 
   // Настройка веб-сервера
   setupWebServer();
@@ -295,12 +309,12 @@ void setupWebServer() {
   // API для обновления настроек
   server.on("/settings", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
     [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-      if (!controller) {
+      if (!controller || !commandDispatcher) {
         request->send(500, "text/plain", "Controller not initialized");
         return;
       }
 
-      DynamicJsonDocument doc(2048);
+      DynamicJsonDocument doc(4096);
       DeserializationError error = deserializeJson(doc, data, len);
 
       if (error) {
@@ -308,22 +322,24 @@ void setupWebServer() {
         return;
       }
 
-      Settings& sett = controller->getSettings();
+      // Используем CommandDispatcher для обработки всех полей
       bool needSave = false;
+      int executedCount = commandDispatcher->processDocument(doc, needSave);
 
-      // Обновление основных параметров
-      if (doc.containsKey("minTemp")) { sett.minTemp = doc["minTemp"]; needSave = true; }
-      if (doc.containsKey("maxTemp")) { sett.maxTemp = doc["maxTemp"]; needSave = true; }
-      if (doc.containsKey("minHum")) { sett.minHum = doc["minHum"]; needSave = true; }
-      if (doc.containsKey("maxHum")) { sett.maxHum = doc["maxHum"]; needSave = true; }
-      if (doc.containsKey("heatOn")) { sett.heatOn = doc["heatOn"]; needSave = true; }
-      if (doc.containsKey("heatOff")) { sett.heatOff = doc["heatOff"]; needSave = true; }
+      Serial.printf("WebServer: Обработано %d команд из POST /settings\n", executedCount);
 
       if (needSave && storageManager) {
-        storageManager->saveSettings(sett, "web_api");
+        storageManager->saveSettings(controller->getSettings(), "web_api");
       }
 
-      request->send(200, "text/plain", "Settings updated");
+      // Создаем ответ
+      DynamicJsonDocument resp(256);
+      resp["success"] = true;
+      resp["commands_executed"] = executedCount;
+      String json;
+      serializeJson(resp, json);
+
+      request->send(200, "application/json", json);
     }
   );
 

@@ -11,6 +11,8 @@
 #include <ArduinoJson.h>
 #include <RTClib.h>
 #include "Config.h"
+#include "commands/CommandDispatcher.h"
+#include "commands/AllCommands.h"
 
 // Прототипы функций обратного вызова
 typedef void (*SettingsUpdateCallback)(Settings& settings, bool needSave);
@@ -58,6 +60,9 @@ public:
   // Установка ссылки на настройки (для прямой модификации)
   void setSettingsReference(Settings* settings);
 
+  // Установка внешнего CommandDispatcher
+  void setCommandDispatcher(CommandDispatcher* dispatcher);
+
   // Подписка на топики
   void subscribe();
 
@@ -76,6 +81,10 @@ private:
 
   // Ссылка на настройки (для прямой модификации)
   Settings* _settings;
+
+  // Command Pattern для обработки настроек
+  CommandDispatcher* _dispatcher;
+  AllCommands* _allCommands;
 
   // Статическая функция callback для PubSubClient
   static void mqttCallback(char* topic, byte* payload, unsigned int length);
