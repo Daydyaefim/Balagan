@@ -145,16 +145,166 @@ void GreenhouseController::publishHistoryIfNeeded(uint32_t now) {
 
 // Инициализация состояния полива при старте
 void GreenhouseController::initializeWateringState() {
-  // TODO: Перенести полную логику инициализации из UgAgro_95.ino строки 2131-2275
-  // - Сброс состояния тумана если активно
-  // - Проверка нового дня и сброс счетчиков
-  // - Восстановление morning watering после перезагрузки
-  // - Восстановление auto/manual watering после перезагрузки
-  // - Восстановление forced watering mode
-  // - Обработка hydroMix и fillState
+  _forcedPumpStarted = false; // Сброс флага при init
+
+  // Сброс состояния тумана если активно при старте
+  if (_settings.fogState) {
+    _actuators.setFogPump(false);
+    _actuators.setFogValve(false);
+    _fog = false;
+    _fogValveOn = false;
+    _settings.fogState = false;
+    _storage.saveSettings(_settings, "fog_init");
+  }
+  _taskLastFog = 0;
+  _taskFogStartTime = 0;
+  _fogValveStartTime = 0;
+
+  DateTime nowDt = _rtc.now();
+  uint32_t nowUnix = nowDt.unixtime();
+  int currentDay = nowDt.day();
+  int h = nowDt.hour(), m = nowDt.minute();
+  int currentMin = h * 60 + m;
+  int startMin = _settings.wateringStartHour * 60 + _settings.wateringStartMinute;
+  int endMin = _settings.wateringEndHour * 60 + _settings.wateringEndMinute;
+
+  float level = 0;
+  if (_qLevel) xQueuePeek(_qLevel, &level, 0);
+
+  // Проверка нового дня и сброс счетчиков
+  if (currentDay != _lastDay) {
+    _settings.cycleCount = 0;
+    // НЕ сбрасываем radSum при новом дне для morning
+    _settings.morningStartedToday = false;
+    _settings.morningWateringActive = false;
+    _settings.currentMorningWatering = 0;
+    _settings.lastMorningWateringEndUnix = 0;
+    _lastDay = currentDay;
+    LOG("DEBUG AUTO-WATER: New day started. Reset cycleCount=%d, morningStartedToday=false\n", _settings.cycleCount);
+    _storage.saveSettings(_settings, "new_day_reset");
+  }
+
+  // Восстановление morning watering после перезагрузки
+  if (_settings.morningWateringActive && _settings.currentMorningWatering > 0 && _settings.morningWateringCount > 0) {
+    uint32_t dayStartEstimate = nowUnix - (nowUnix % 86400);
+    if (_settings.lastMorningWateringStartUnix >= (dayStartEstimate - 86400)) {
+      uint32_t elapsedMorning = nowUnix - _settings.lastMorningWateringStartUnix;
+      uint32_t durationSec = _settings.morningWateringDuration / 1000UL;
+      if (elapsedMorning < durationSec) {
+        _settings.pumpState = true;
+        LOG("DEBUG MORNING-RESTORE: Restored morning #%d (%.1f sec left)\n", _settings.currentMorningWatering, durationSec - elapsedMorning);
+      } else if (elapsedMorning >= (_settings.morningWateringInterval / 1000UL)) {
+        if (_settings.currentMorningWatering < _settings.morningWateringCount) {
+          _settings.currentMorningWatering++;
+          _settings.lastMorningWateringStartUnix = nowUnix;
+          _settings.pumpState = true;
+          LOG("DEBUG MORNING-RESTORE: Started next morning #%d after restart\n", _settings.currentMorningWatering);
+        } else {
+          _settings.morningWateringActive = false;
+          // НЕ сбрасываем radSum; lastWateringStartUnix на lastMorningStart
+          _settings.lastWateringStartUnix = _settings.lastMorningWateringStartUnix;
+          LOG("DEBUG MORNING-RESTORE: Sequence completed, morning inactive, lastWateringStart=lastMorningStart\n");
+        }
+      } else {
+        _settings.pumpState = false;
+        LOG("DEBUG MORNING-RESTORE: Morning interval not elapsed yet (%.1f sec left)\n", (_settings.morningWateringInterval / 1000UL) - elapsedMorning);
+      }
+    } else {
+      _settings.morningWateringActive = false;
+      _settings.morningStartedToday = false;
+      _settings.currentMorningWatering = 0;
+      LOG("DEBUG MORNING-RESTORE: Old day detected - reset morning state\n");
+    }
+    _storage.saveSettings(_settings, "morning_restore");
+  }
+
+  // Отмена morning если вне временного окна
+  if (_settings.morningWateringActive && currentMin >= endMin) {
+    _settings.morningWateringActive = false;
+    _settings.morningStartedToday = true;
+    _settings.currentMorningWatering = _settings.morningWateringCount;
+    _settings.lastWateringStartUnix = _settings.lastMorningWateringStartUnix;
+    LOG("DEBUG MORNING-RESTORE: Outside end time - cancel morning sequence, lastWateringStart=lastMorningStart\n");
+    _storage.saveSettings(_settings, "morning_restore_endtime");
+  }
+
+  // Восстановление auto/manual watering после перезагрузки
+  if ((_settings.wateringMode == 0 || _settings.wateringMode == 1) && currentMin >= startMin && currentMin < endMin) {
+    uint32_t elapsedWater = nowUnix - _settings.lastWateringStartUnix;
+    uint32_t durationSec = (_settings.wateringMode == 0 ? _settings.pumpTime : _settings.manualWateringDuration) / 1000UL;
+    if (_settings.pumpState && elapsedWater < durationSec) {
+      LOG("DEBUG WATER-RESTORE: Restored %s watering (%.1f sec left)\n", (_settings.wateringMode == 0 ? "auto" : "manual"), durationSec - elapsedWater);
+    } else {
+      _settings.pumpState = false;
+    }
+  }
+
+  // Восстановление forced watering mode
+  if (_settings.forceWateringActive) {
+    if (nowUnix >= _settings.forceWateringEndTimeUnix) {
+      _settings.forceWateringActive = false;
+      _settings.pumpState = false;
+      _settings.fillState = false;
+      _settings.hydroMix = false;
+      _settings.wateringMode = _settings.prevWateringMode;
+      _settings.hydroStartUnix = 0;
+      _settings.forceWateringEndTimeUnix = 0;
+
+      // Если был реальный полив, сбросить таймеры здесь
+      if (_settings.forcedWateringPerformed) {
+        _settings.lastWateringStartUnix = nowUnix;
+        int targetMode = _settings.prevWateringMode;
+        if (targetMode == 0) {
+          _settings.radSum = 0.0f;
+          _settings.cycleCount++;
+        } else if (targetMode == 1) {
+          _settings.lastManualWateringTimeUnix = nowUnix;
+        }
+        _settings.forcedWateringPerformed = false;
+        LOG("DEBUG FORCED-RESTORE: Forced timeout after restart - ended, timers reset (performed)\n");
+      } else {
+        LOG("DEBUG FORCED-RESTORE: Forced timeout after restart - ended, no reset (no pump)\n");
+      }
+      _storage.saveSettings(_settings, "forced_timeout_restore");
+    } else {
+      bool shouldPump = !(_settings.fillState && !_settings.hydroMix);
+      if (shouldPump) {
+        _settings.pumpState = true;
+        _forcedPumpStarted = true;
+        _settings.forcedWateringPerformed = true;
+      } else {
+        _settings.pumpState = false;
+      }
+
+      // Обработка hydroMix
+      if (_settings.hydroMix) {
+        uint32_t elapsedHydro = nowUnix - _settings.hydroStartUnix;
+        uint32_t hydroSec = _settings.hydroMixDuration / 1000UL;
+        if (elapsedHydro >= hydroSec) {
+          _settings.hydroMix = false;
+          _settings.hydroStartUnix = 0;
+          LOG("DEBUG HYDRO-RESTORE: Hydro timeout after restart - ended\n");
+          _storage.saveSettings(_settings, "hydro_restore_timeout");
+        }
+      }
+
+      // Обработка fillState
+      if (_settings.fillState && level >= 99.0) {
+        _settings.fillState = false;
+        LOG("DEBUG FILL-RESTORE: Fill complete after restart - ended\n");
+        _storage.saveSettings(_settings, "fill_restore_complete");
+      }
+
+      LOG("DEBUG FORCED-RESTORE: Restored forced (%.1f sec left)\n", _settings.forceWateringEndTimeUnix - nowUnix);
+      _storage.saveSettings(_settings, "forced_restore");
+    }
+  } else if (_settings.forceWateringOverride) {
+    _settings.pumpState = false;
+    LOG("DEBUG OVERRIDE-RESTORE: Override active after restart - pump OFF\n");
+  }
 
   _initialized = true;
-  Serial.println("GreenhouseController: Watering state initialization completed (structure only)");
+  Serial.println("GreenhouseController: Watering state initialization completed");
 }
 
 // Проверка ручных режимов
@@ -533,26 +683,206 @@ void GreenhouseController::updateWatering(float pyrano, const MatSensorData& mat
   // ===========================
   // УТРЕННИЙ ПОЛИВ (MORNING WATERING)
   // ===========================
-  // TODO: Полная реализация из строк 2296-2359
-  // - Проверка morningWateringCount > 0
-  // - Запуск последовательности утренних поливов
-  // - Управление интервалами и длительностью
-  // - Проверка немедленного auto полива после morning если radSum >= threshold
+  if ((_settings.wateringMode == 0 || _settings.wateringMode == 1) && _settings.morningWateringCount > 0 &&
+      !_settings.forceWateringActive && !_settings.forceWateringOverride) {
+    uint32_t morningWindowMin = (_settings.morningWateringCount > 0) ?
+      (_settings.morningWateringCount - 1UL) * (_settings.morningWateringInterval / 60000UL) : 0;
+
+    // Проверка запуска утреннего полива
+    if (!_settings.morningStartedToday && currentMin >= startMin && currentMin < endMin &&
+        currentMin < (startMin + morningWindowMin)) {
+      _settings.morningStartedToday = true;
+      _settings.morningWateringActive = true;
+      _settings.currentMorningWatering = 1;
+      _settings.lastMorningWateringStartUnix = nowUnix;
+      _settings.pumpState = true;
+      _settings.lastWateringStartUnix = nowUnix; // Для morning используем текущий
+      // НЕ сбрасываем radSum
+      _settings.lastManualWateringTimeUnix = nowUnix;
+      _settings.lastSunTimeUnix = nowUnix;
+      _settings.cycleCount++;
+      _storage.saveSettings(_settings, "morning_watering_started");
+      LOG("DEBUG MORNING-WATER: Started sequence! Count=%u, Interval=%u ms, Duration=%u ms, Cycle %d (unix %lu)\n",
+          _settings.morningWateringCount, _settings.morningWateringInterval, _settings.morningWateringDuration,
+          _settings.cycleCount, nowUnix);
+    }
+
+    // Управление активным утренним поливом
+    if (_settings.morningWateringActive) {
+      uint32_t elapsedMorning = nowUnix - _settings.lastMorningWateringStartUnix;
+      uint32_t durationSec = _settings.morningWateringDuration / 1000UL;
+
+      // Выключить насос по истечении длительности
+      if (_settings.pumpState && elapsedMorning >= durationSec) {
+        _settings.pumpState = false;
+        _settings.lastMorningWateringEndUnix = nowUnix;
+        LOG("DEBUG MORNING-WATER: Ended watering #%u after %u sec (unix %lu)\n",
+            _settings.currentMorningWatering, elapsedMorning, nowUnix);
+
+        // Проверка завершения всей последовательности
+        if (_settings.currentMorningWatering >= _settings.morningWateringCount) {
+          _settings.morningWateringActive = false;
+          // НЕ сбрасываем radSum; lastWateringStartUnix уже на старте последнего
+          if (_settings.wateringMode == 1) {
+            _settings.lastManualWateringTimeUnix = _settings.lastMorningWateringStartUnix;
+          }
+          _storage.saveSettings(_settings, "morning_watering_completed");
+          LOG("DEBUG MORNING-WATER: Sequence completed! lastWateringStart remains lastMorningStart (unix %lu)\n",
+              _settings.lastWateringStartUnix);
+
+          // Проверка на немедленный запуск auto после morning, если radSum >= threshold
+          if (_settings.wateringMode == 0 && _settings.radSum >= (_settings.radThreshold * 1e6)) {
+            uint32_t minSec = _settings.minWateringInterval / 1000UL;
+            uint32_t elapsedFromLastMorning = nowUnix - _settings.lastMorningWateringStartUnix;
+            if (elapsedFromLastMorning >= minSec) {
+              _settings.lastWateringStartUnix = nowUnix;
+              _settings.cycleCount++;
+              _settings.radSum = 0.0f;
+              _settings.lastSunTimeUnix = nowUnix;
+              _settings.pumpState = true;
+              _storage.saveSettings(_settings, "auto_after_morning_rad");
+              LOG("DEBUG AUTO-WATER: STARTED after morning by radiation! Cycle %d (unix %lu)\n",
+                  _settings.cycleCount, nowUnix);
+            }
+          }
+        }
+      }
+
+      // Запуск следующего полива в последовательности
+      uint32_t intervalSec = _settings.morningWateringInterval / 1000UL;
+      if (!_settings.pumpState && _settings.currentMorningWatering < _settings.morningWateringCount &&
+          (nowUnix - _settings.lastMorningWateringStartUnix) >= intervalSec && currentMin < endMin) {
+        _settings.currentMorningWatering++;
+        _settings.lastMorningWateringStartUnix = nowUnix;
+        _settings.pumpState = true;
+        _settings.lastWateringStartUnix = nowUnix;
+        // НЕ сбрасываем radSum
+        _settings.lastManualWateringTimeUnix = nowUnix;
+        _settings.lastSunTimeUnix = nowUnix;
+        _settings.cycleCount++;
+        _storage.saveSettings(_settings, "morning_watering_next");
+        LOG("DEBUG MORNING-WATER: Started next watering #%u, Cycle %d (unix %lu)\n",
+            _settings.currentMorningWatering, _settings.cycleCount, nowUnix);
+      }
+    }
+  }
 
   // ===========================
   // АВТОМАТИЧЕСКИЙ ПОЛИВ (AUTO WATERING - wateringMode == 0)
   // ===========================
   if (_settings.wateringMode == 0 && !_settings.forceWateringActive &&
       !_settings.forceWateringOverride && !_settings.morningWateringActive) {
-    // TODO: Полная реализация из строк 2360-2450
-    // - Накопление солнечной радиации (radSum += pyrano * delta_time)
-    // - Сброс radSum если нет солнца долгое время
-    // - Проверка условий: в пределах часов полива, уровень >= 2%, циклы < max
-    // - Проверка mat sensor: humidity > min, EC < max
-    // - Запуск полива по радиации или максимальному интервалу
-    // - Выключение по истечении pumpTime
+    static uint32_t lastAutoWateringCheck = 0;
 
-    LOG("DEBUG: AUTO watering mode active (TODO: full implementation)\n");
+    // Периодическая проверка по интервалу radCheckInterval
+    if (millis() - lastAutoWateringCheck >= _settings.radCheckInterval) {
+      lastAutoWateringCheck = millis();
+      LOG("DEBUG AUTO-WATER: Auto watering check interval elapsed. Current radSum=%.2f J/m2, threshold=%.2f MJ/m2 (%.2f J/m2)\n",
+          _settings.radSum, _settings.radThreshold, _settings.radThreshold * 1e6);
+
+      // Накопление солнечной радиации
+      if (!isnan(pyrano) && pyrano > 0) {
+        float deltaRad = pyrano * (_settings.radCheckInterval / 1000.0);
+        _settings.radSum += deltaRad;
+        _settings.lastSunTimeUnix = nowUnix;
+        LOG("DEBUG AUTO-WATER: Radiation accumulation: pyrano=%.2f W/m2, delta=%.2f J/m2, new radSum=%.2f J/m2 (unix %lu)\n",
+            pyrano, deltaRad, _settings.radSum, nowUnix);
+      } else {
+        LOG("DEBUG AUTO-WATER: No radiation detected (pyrano=%.2f), checking reset\n", pyrano);
+        // Сброс radSum если нет солнца долгое время
+        uint32_t resetSec = _settings.radSumResetInterval / 1000UL;
+        if ((nowUnix - _settings.lastSunTimeUnix) >= resetSec) {
+          _settings.radSum = 0.0f;
+          _settings.lastSunTimeUnix = nowUnix;
+          LOG("DEBUG AUTO-WATER: radSum reset to 0 due to no sun for %u sec (unix %lu)\n", resetSec, nowUnix);
+        }
+      }
+
+      // Проверка условий запуска полива
+      if (currentMin >= startMin && currentMin < endMin) {
+        LOG("DEBUG AUTO-WATER: Within watering hours (%02d:%02d - %02d:%02d). Checking conditions...\n",
+            _settings.wateringStartHour, _settings.wateringStartMinute,
+            _settings.wateringEndHour, _settings.wateringEndMinute);
+
+        if (level >= 2) {
+          LOG("DEBUG AUTO-WATER: Level OK (%.1f%% >=2). Cycles left: %d/%d\n",
+              level, _settings.maxWateringCycles - _settings.cycleCount, _settings.maxWateringCycles);
+
+          if (_settings.cycleCount < _settings.maxWateringCycles) {
+            uint32_t minSec = _settings.minWateringInterval / 1000UL;
+            uint32_t elapsedWater = nowUnix - _settings.lastWateringStartUnix;
+
+            if (elapsedWater >= minSec) {
+              LOG("DEBUG AUTO-WATER: Min interval OK (last watering %u sec ago >= %u sec)\n", elapsedWater, minSec);
+
+              // Проверка mat sensor
+              if (!isnan(mat.humidity) && mat.humidity > _settings.matMinHumidity) {
+                LOG("DEBUG AUTO-WATER: Mat humidity OK (%.1f%% > %.1f%%)\n", mat.humidity, _settings.matMinHumidity);
+
+                if (!isnan(mat.ec) && mat.ec < _settings.matMaxEC) {
+                  LOG("DEBUG AUTO-WATER: Mat EC OK (%.2f < %.2f dS/m)\n", mat.ec, _settings.matMaxEC);
+
+                  // Проверка условий запуска: по радиации или по максимальному интервалу
+                  bool radCondition = (_settings.radSum >= (_settings.radThreshold * 1e6));
+                  uint32_t maxSec = _settings.maxWateringInterval / 1000UL;
+                  bool maxIntervalCondition = (elapsedWater >= maxSec);
+
+                  if (radCondition || maxIntervalCondition) {
+                    _settings.lastWateringStartUnix = nowUnix;
+                    _settings.lastManualWateringTimeUnix = nowUnix;
+                    _settings.cycleCount++;
+                    _settings.radSum = 0.0f;
+                    _settings.lastSunTimeUnix = nowUnix;
+                    _settings.pumpState = true;
+                    _storage.saveSettings(_settings, radCondition ? "auto_watering_started" : "auto_watering_by_max_interval");
+                    LOG("DEBUG AUTO-WATER: STARTED by %s! Cycle %d, radSum reset (unix %lu)\n",
+                        radCondition ? "radiation" : "max interval", _settings.cycleCount, nowUnix);
+                  } else if (mat.humidity < (_settings.matMinHumidity - 10.0)) {
+                    // Особый случай: очень низкая влажность субстрата
+                    _settings.lastWateringStartUnix = nowUnix;
+                    _settings.lastManualWateringTimeUnix = nowUnix;
+                    _settings.cycleCount++;
+                    _settings.radSum = 0.0f;
+                    _settings.lastSunTimeUnix = nowUnix;
+                    _settings.pumpState = true;
+                    _storage.saveSettings(_settings, "extra_watering_started");
+                    LOG("DEBUG AUTO-WATER: STARTED by low mat humidity (%.1f%% < %.1f%%)! Cycle %d (unix %lu)\n",
+                        mat.humidity, _settings.matMinHumidity - 10.0, _settings.cycleCount, nowUnix);
+                  } else {
+                    LOG("DEBUG AUTO-WATER: Conditions not met - radSum=%.2f < %.2f J/m2 (maxInt=%.2f h), matHum=%.1f%% >= %.1f%%\n",
+                        _settings.radSum, _settings.radThreshold * 1e6, (float)elapsedWater / 3600.0,
+                        mat.humidity, _settings.matMinHumidity);
+                  }
+                } else {
+                  LOG("DEBUG AUTO-WATER: Mat EC high (%.2f >= %.2f) - no watering\n", mat.ec, _settings.matMaxEC);
+                }
+              } else {
+                LOG("DEBUG AUTO-WATER: Mat humidity low or invalid (%.1f%% <= %.1f%%) - no watering\n",
+                    mat.humidity, _settings.matMinHumidity);
+              }
+            } else {
+              LOG("DEBUG AUTO-WATER: Min interval not elapsed (%u sec < %u sec) - skip\n", elapsedWater, minSec);
+            }
+          } else {
+            LOG("DEBUG AUTO-WATER: Max cycles reached (%d/%d) - skip\n",
+                _settings.cycleCount, _settings.maxWateringCycles);
+          }
+        } else {
+          LOG("DEBUG AUTO-WATER: Low level (%.1f%% <2) - skip\n", level);
+        }
+      } else {
+        LOG("DEBUG AUTO-WATER: Outside watering hours (current %02d:%02d) - skip\n", h, m);
+      }
+    }
+
+    // Выключение насоса по истечении pumpTime
+    uint32_t elapsedWater = nowUnix - _settings.lastWateringStartUnix;
+    uint32_t pumpSec = _settings.pumpTime / 1000UL;
+    if (_settings.pumpState && elapsedWater >= pumpSec) {
+      _settings.pumpState = false;
+      _storage.saveSettings(_settings, "auto_watering_ended");
+      LOG("DEBUG AUTO-WATER: Auto watering ended after %u sec (unix %lu)\n", elapsedWater, nowUnix);
+    }
   }
 
   // ===========================
@@ -560,27 +890,204 @@ void GreenhouseController::updateWatering(float pyrano, const MatSensorData& mat
   // ===========================
   if (_settings.wateringMode == 1 && !_settings.forceWateringActive &&
       !_settings.forceWateringOverride && !_settings.morningWateringActive) {
-    // TODO: Полная реализация из строк 2452-2480
-    // - Периодическая проверка (каждые 60 сек)
-    // - Запуск полива по интервалу manualWateringInterval
-    // - Длительность manualWateringDuration
-    // - Проверка level >= 10%
+    static uint32_t lastManualPeriodicCheck = 0;
 
-    LOG("DEBUG: MANUAL watering mode active (TODO: full implementation)\n");
+    // Периодическая проверка каждые 60 секунд
+    if (millis() - lastManualPeriodicCheck >= 60000) {
+      lastManualPeriodicCheck = millis();
+
+      // Проверка в пределах временного окна полива
+      if (currentMin >= startMin && currentMin < endMin) {
+        uint32_t elapsedManual = nowUnix - _settings.lastManualWateringTimeUnix;
+        uint32_t intervalSec = _settings.manualWateringInterval / 1000UL;
+
+        // Запуск полива если прошел интервал и уровень достаточный
+        if (elapsedManual >= intervalSec && level >= 10) {
+          _settings.lastManualWateringTimeUnix = nowUnix;
+          _settings.lastWateringStartUnix = nowUnix;
+          _settings.radSum = 0.0f;
+          _settings.lastSunTimeUnix = nowUnix;
+          _settings.pumpState = true;
+          _settings.cycleCount++;
+          _storage.saveSettings(_settings, "manual_watering_started");
+          LOG("DEBUG MANUAL-WATER: Started periodic watering, Cycle %d (unix %lu)\n",
+              _settings.cycleCount, nowUnix);
+        }
+      }
+    }
+
+    // Выключение насоса по истечении manualWateringDuration
+    uint32_t manualSec = _settings.manualWateringDuration / 1000UL;
+    if (_settings.pumpState && (nowUnix - _settings.lastWateringStartUnix) >= manualSec) {
+      _settings.pumpState = false;
+      _storage.saveSettings(_settings, "manual_watering_ended");
+      LOG("DEBUG MANUAL-WATER: Manual watering ended after %u sec (unix %lu)\n", manualSec, nowUnix);
+    }
   }
 
   // ===========================
   // FORCED РЕЖИМ ПОЛИВА
   // ===========================
   if (_settings.forceWateringActive) {
-    // TODO: Полная реализация из строк 2482-2606
-    // - Управление hydroMix (3-way valve, pump)
-    // - Управление fillState (fill valve)
-    // - Проверка завершения forced режима
-    // - Переход к нормальному режиму с сбросом таймеров
-    // - Обработка forcedWateringPerformed флага
+    bool targetPumpState = false;
+    bool targetThreeWayState = false;
+    bool targetFillState = _settings.fillState;
+    bool shouldTransitionToNormal = false;
+    int transitionMode = _settings.prevWateringMode; // По умолчанию к предыдущему
 
-    LOG("DEBUG: FORCED watering mode active (TODO: full implementation)\n");
+    // Обработка hydroMix (смешивание раствора)
+    if (_settings.hydroMix) {
+      uint32_t hydroSec = _settings.hydroMixDuration / 1000UL;
+      if ((nowUnix - _settings.hydroStartUnix) < hydroSec) {
+        targetPumpState = true;
+        targetThreeWayState = true;
+        if (!_forcedPumpStarted) {
+          _forcedPumpStarted = true;
+          _settings.forcedWateringPerformed = true;
+          _settings.lastWateringStartUnix = nowUnix;
+          LOG("DEBUG: Hydro mix active - REL_PUMP HIGH, REL_3WAY HIGH, timers reset\n");
+        } else {
+          LOG("DEBUG: Hydro mix active - REL_PUMP HIGH, REL_3WAY HIGH\n");
+        }
+      } else {
+        _settings.hydroMix = false;
+        _settings.hydroStartUnix = 0;
+        LOG("DEBUG: Hydro mix timeout - continue fill if active\n");
+        if (!_settings.fillState) {
+          // Если нет fill, но был hydro — переходить, если таймаут основной истёк
+          if (nowUnix >= _settings.forceWateringEndTimeUnix) {
+            shouldTransitionToNormal = true;
+          }
+        } // Иначе продолжить fill
+      }
+    }
+
+    // Обработка fillState (наполнение бака)
+    if (_settings.fillState) {
+      if (level >= 99.0) {
+        _settings.fillState = false;
+        LOG("DEBUG: Fill complete - check for transition\n");
+        // Если был hydro (даже завершённый), теперь переходить
+        if (!_settings.hydroMix) { // Hydro уже завершён или не был
+          shouldTransitionToNormal = true;
+        }
+        // Если hydro ещё идёт, продолжить (но hydro таймаут выше)
+      } else {
+        targetFillState = true;
+        // Для fill без hydro: pump только если нужно, но без сброса таймера (fill не считается поливом)
+        targetPumpState = _settings.hydroMix; // Насос только если hydro
+        targetThreeWayState = _settings.hydroMix;
+        LOG("DEBUG: Fill active - REL_FILL HIGH (level %.1f%%)\n", level);
+      }
+    } else {
+      // Нет fill и нет hydro — стандартный таймаут
+      targetPumpState = (nowUnix < _settings.forceWateringEndTimeUnix);
+      if (targetPumpState && !_forcedPumpStarted) {
+        _forcedPumpStarted = true;
+        _settings.forcedWateringPerformed = true;
+        _settings.lastWateringStartUnix = nowUnix;
+        LOG("DEBUG: Forced pump start - timers reset\n");
+      }
+      if (!targetPumpState && !_forcedPumpStarted && nowUnix >= _settings.forceWateringEndTimeUnix) {
+        // Если не стартовал pump, не засчитывать
+        shouldTransitionToNormal = true;
+      }
+    }
+
+    // Переход к нормальному режиму
+    if (shouldTransitionToNormal) {
+      int targetMode = _settings.prevWateringMode;
+      if (!_settings.forcedWateringPerformed) {
+        targetMode = 2; // Переход в режим 2 (выключено) если не было реального полива
+      }
+
+      _actuators.setPump(false);
+      _settings.pumpState = false;
+      _settings.forceWateringActive = false;
+      _settings.wateringMode = targetMode;
+
+      // Сброс таймеров только если был performed
+      if (_settings.forcedWateringPerformed) {
+        _settings.lastWateringStartUnix = nowUnix;
+        if (targetMode == 0) {
+          _settings.radSum = 0.0f;
+          _settings.cycleCount++;
+        } else if (targetMode == 1) {
+          _settings.lastManualWateringTimeUnix = nowUnix;
+        }
+        _settings.forcedWateringPerformed = false;
+      }
+
+      _settings.forceWateringOverride = false;
+      _settings.forceWateringEndTimeUnix = 0;
+
+      // Обработка morning после forced
+      if (targetMode == 0 || targetMode == 1) {
+        if (_settings.morningWateringActive) {
+          _settings.lastMorningWateringEndUnix = nowUnix;
+          if (_settings.pendingMorningComplete) {
+            _settings.currentMorningWatering++;
+            _settings.pendingMorningComplete = false;
+            LOG("DEBUG MORNING-WATER: Forced counted as completed morning watering #%u\n",
+                _settings.currentMorningWatering);
+          }
+
+          // Проверка завершения morning последовательности
+          if (_settings.currentMorningWatering >= _settings.morningWateringCount) {
+            _settings.morningWateringActive = false;
+            // НЕ сбрасываем radSum
+            _settings.lastWateringStartUnix = _settings.lastMorningWateringStartUnix;
+            if (targetMode == 1) {
+              _settings.lastManualWateringTimeUnix = _settings.lastMorningWateringStartUnix;
+            }
+            _storage.saveSettings(_settings, "morning_completed_after_forced");
+            LOG("DEBUG MORNING-WATER: Sequence completed after forced! lastWateringStart=lastMorningStart\n");
+
+            // Проверка на auto после forced+morning
+            if (targetMode == 0 && _settings.radSum >= (_settings.radThreshold * 1e6)) {
+              uint32_t minSec = _settings.minWateringInterval / 1000UL;
+              uint32_t elapsedFromLastMorning = nowUnix - _settings.lastMorningWateringStartUnix;
+              if (elapsedFromLastMorning >= minSec) {
+                _settings.lastWateringStartUnix = nowUnix;
+                _settings.cycleCount++;
+                _settings.radSum = 0.0f;
+                _settings.lastSunTimeUnix = nowUnix;
+                _settings.pumpState = true;
+                _storage.saveSettings(_settings, "auto_after_forced_morning_rad");
+                LOG("DEBUG AUTO-WATER: STARTED after forced+morning by radiation! Cycle %d (unix %lu)\n",
+                    _settings.cycleCount, nowUnix);
+              }
+            }
+          }
+        }
+      }
+
+      _storage.saveSettings(_settings, "force_watering_transition");
+      LOG("DEBUG: Force watering transition to mode %d after completion (unix %lu, performed=%s)\n",
+          targetMode, nowUnix, _settings.forcedWateringPerformed ? "true" : "false");
+
+      // Явная публикация после перехода (используя MQTT напрямую)
+      if (_mqtt.isConnected()) {
+        SensorData avgData;
+        float sol = 0, wind = 0;
+        SensorData outdoor;
+        MatSensorData matData;
+
+        if (_qAvg) xQueuePeek(_qAvg, &avgData, 0);
+        if (_qSol) xQueuePeek(_qSol, &sol, 0);
+        if (_qWind) xQueuePeek(_qWind, &wind, 0);
+        if (_qOutdoor) xQueuePeek(_qOutdoor, &outdoor, 0);
+        if (_qMat) xQueuePeek(_qMat, &matData, 0);
+
+        _mqtt.publishAllSensors(avgData, sol, level, wind, outdoor, matData, pyrano,
+                                 _actuators.getWindowPosition(), _settings);
+      }
+    } else {
+      // Применить состояние актуаторов
+      _actuators.setPump(targetPumpState);
+      _actuators.setThreeWayValve(targetThreeWayState);
+      _actuators.setFillValve(targetFillState);
+    }
   }
 
   // ===========================
