@@ -10,7 +10,8 @@ MqttManager* MqttManager::_instance = nullptr;
 // Конструктор
 MqttManager::MqttManager(WiFiClient& wifiClient, RTC_DS3231& rtc)
   : _client(wifiClient), _rtc(rtc),
-    _settingsUpdateCallback(nullptr), _commandCallback(nullptr) {
+    _settingsUpdateCallback(nullptr), _commandCallback(nullptr),
+    _saveSettingsCallback(nullptr), _settings(nullptr) {
   _instance = this;
 }
 
@@ -102,8 +103,21 @@ void MqttManager::handleMessage(char* topic, byte* payload, unsigned int length)
   if (strcmp(topic, "greenhouse/cmd/set_settings") == 0 ||
       strcmp(topic, "greenhouse/set_settings") == 0) {
     handleSetSettings(msg);
+  } else if (strcmp(topic, "greenhouse/cmd/equipment") == 0) {
+    handleEquipment(msg);
+  } else if (strcmp(topic, "greenhouse/cmd/window") == 0) {
+    handleWindow(msg);
+  } else if (strcmp(topic, "greenhouse/cmd/hydro") == 0) {
+    handleHydro();
+  } else if (strcmp(topic, "greenhouse/cmd/request_settings") == 0) {
+    if (_settings) publishSettings(*_settings);
+  } else if (strcmp(topic, "greenhouse/cmd/request_history") == 0) {
+    // История публикуется через контроллер
+    LOG("MqttManager: Запрошена история\n");
   } else if (strncmp(topic, "greenhouse/cmd/", 15) == 0) {
     handleCommand(topic + 15, msg);
+  } else {
+    LOG("MqttManager: Неизвестный топик: %s\n", topic);
   }
 }
 
@@ -303,4 +317,199 @@ void MqttManager::setSettingsUpdateCallback(SettingsUpdateCallback callback) {
 
 void MqttManager::setCommandCallback(CommandCallback callback) {
   _commandCallback = callback;
+}
+
+void MqttManager::setSaveSettingsCallback(SaveSettingsCallback callback) {
+  _saveSettingsCallback = callback;
+}
+
+void MqttManager::setSettingsReference(Settings* settings) {
+  _settings = settings;
+}
+
+// ===========================
+// ОБРАБОТЧИКИ КОМАНД
+// ===========================
+
+// Обработка команды equipment (управление оборудованием)
+void MqttManager::handleEquipment(const String& json) {
+  if (!_settings) {
+    LOG("MqttManager: Settings не установлены\n");
+    return;
+  }
+
+  DynamicJsonDocument doc(512);
+  DeserializationError error = deserializeJson(doc, json);
+
+  if (error) {
+    LOG("MqttManager: Ошибка парсинга JSON equipment: %s\n", error.c_str());
+    return;
+  }
+
+  if (!doc.containsKey("equipment") || !doc.containsKey("state")) {
+    LOG("MqttManager: Отсутствуют обязательные поля equipment/state\n");
+    return;
+  }
+
+  String eq = doc["equipment"].as<String>();
+  bool state = doc["state"].as<bool>();
+  bool override = doc.containsKey("override") ? doc["override"].as<bool>() : false;
+  bool needSave = false;
+
+  if (eq == "fan") {
+    _settings->manualFan = true;
+    _settings->fanState = state;
+    needSave = true;
+    LOG("MqttManager: Вентилятор %s\n", state ? "ВКЛ" : "ВЫКЛ");
+  }
+  else if (eq == "heating") {
+    _settings->manualHeat = true;
+    _settings->heatState = state;
+    needSave = true;
+    LOG("MqttManager: Отопление %s\n", state ? "ВКЛ" : "ВЫКЛ");
+  }
+  else if (eq == "watering") {
+    _settings->manualPump = true;
+    _settings->manualPumpOverride = override;
+    _settings->pumpState = state;
+    needSave = true;
+    LOG("MqttManager: Полив %s, override=%d\n", state ? "ВКЛ" : "ВЫКЛ", override);
+  }
+  else if (eq == "solution-heating") {
+    _settings->manualSol = true;
+    _settings->solHeatState = state;
+    needSave = true;
+    LOG("MqttManager: Нагрев раствора %s\n", state ? "ВКЛ" : "ВЫКЛ");
+  }
+  else if (eq == "fog-mode-auto") {
+    _settings->fogMode = 0;
+    _settings->forceFogOn = false;
+    _settings->fogState = false;
+    needSave = true;
+    LOG("MqttManager: Режим тумана - АВТО\n");
+  }
+  else if (eq == "fog-mode-manual") {
+    _settings->fogMode = 1;
+    _settings->forceFogOn = false;
+    _settings->fogState = false;
+    needSave = true;
+    LOG("MqttManager: Режим тумана - РУЧНОЙ\n");
+  }
+  else if (eq == "fog-mode-forced") {
+    _settings->fogMode = 2;
+    _settings->forceFogOn = state;
+    needSave = true;
+    LOG("MqttManager: Туман принудительно %s\n", state ? "ВКЛ" : "ВЫКЛ");
+  }
+  else {
+    LOG("MqttManager: Неизвестное оборудование: %s\n", eq.c_str());
+  }
+
+  if (needSave && _saveSettingsCallback) {
+    _saveSettingsCallback("MQTT_cmd_equipment");
+  }
+
+  if (needSave && _settings) {
+    publishSettings(*_settings);
+  }
+}
+
+// Обработка команды window (управление окнами)
+void MqttManager::handleWindow(const String& json) {
+  if (!_settings) {
+    LOG("MqttManager: Settings не установлены\n");
+    return;
+  }
+
+  DynamicJsonDocument doc(256);
+  DeserializationError error = deserializeJson(doc, json);
+
+  if (error) {
+    LOG("MqttManager: Ошибка парсинга JSON window: %s\n", error.c_str());
+    return;
+  }
+
+  if (!doc.containsKey("direction")) {
+    LOG("MqttManager: Отсутствует поле direction\n");
+    return;
+  }
+
+  String dir = doc["direction"].as<String>();
+  uint32_t dur = doc.containsKey("duration") ? doc["duration"].as<uint32_t>() : 0;
+
+  if (dir == "up" || dir == "down") {
+    _settings->manualWindow = true;
+    _settings->windowCommand = dir;
+    _settings->windowDuration = dur;
+
+    if (_saveSettingsCallback) {
+      _saveSettingsCallback("MQTT_window_cmd");
+    }
+
+    LOG("MqttManager: Окно %s, длительность %u мс\n", dir.c_str(), dur);
+  }
+  else if (dir == "stop") {
+    _settings->windowCommand = "stop";
+    LOG("MqttManager: Окно СТОП\n");
+  }
+  else {
+    LOG("MqttManager: Неверное направление: %s\n", dir.c_str());
+  }
+}
+
+// Обработка команды hydro (управление гидропоникой)
+void MqttManager::handleHydro() {
+  if (!_settings) {
+    LOG("MqttManager: Settings не установлены\n");
+    return;
+  }
+
+  DateTime now = _rtc.now();
+  uint32_t nowUnix = now.unixtime();
+
+  if (_settings->hydroMix) {
+    // Выключение гидропоники
+    _settings->hydroMix = false;
+    _settings->forceWateringActive = false;
+    _settings->forceWateringOverride = false;
+    _settings->wateringMode = _settings->prevWateringMode;
+    _settings->pumpState = false;
+    _settings->manualPump = _settings->previousManualPump;
+    _settings->hydroStartUnix = 0;
+    LOG("MqttManager: Гидропоника ВЫКЛ\n");
+  }
+  else {
+    // Включение гидропоники
+    if (_settings->morningWateringActive) {
+      _settings->pendingMorningComplete = true;
+      LOG("MqttManager: Гидропоника запущена во время утреннего полива - ожидание завершения\n");
+    }
+
+    _settings->previousManualPump = _settings->manualPump;
+    _settings->prevWateringMode = _settings->wateringMode;
+    _settings->hydroMix = true;
+    _settings->hydroStartUnix = nowUnix;
+    _settings->pumpState = true;
+    _settings->forceWateringActive = true;
+
+    uint32_t duration = _settings->hydroMixDuration;
+    if (duration == 0) duration = 10 * 60 * 1000UL;
+
+    _settings->forceWateringEndTimeUnix = nowUnix + (duration / 1000UL);
+    _settings->wateringMode = 2;
+
+    if (_settings->forceWateringOverride) {
+      _settings->forceWateringOverride = false;
+    }
+
+    LOG("MqttManager: Гидропоника ВКЛ на %u мс (unix %lu)\n", duration, _settings->hydroStartUnix);
+  }
+
+  if (_saveSettingsCallback) {
+    _saveSettingsCallback("cmd_hydro");
+  }
+
+  if (_settings) {
+    publishSettings(*_settings);
+  }
 }

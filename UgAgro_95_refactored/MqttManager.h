@@ -13,8 +13,9 @@
 #include "Config.h"
 
 // Прототипы функций обратного вызова
-typedef void (*SettingsUpdateCallback)(const Settings& settings);
+typedef void (*SettingsUpdateCallback)(Settings& settings, bool needSave);
 typedef void (*CommandCallback)(const char* command, const char* value);
+typedef void (*SaveSettingsCallback)(const char* caller);
 
 // Класс для управления MQTT подключением и публикациями
 class MqttManager {
@@ -52,6 +53,10 @@ public:
   // Установка callback для обработки входящих команд
   void setSettingsUpdateCallback(SettingsUpdateCallback callback);
   void setCommandCallback(CommandCallback callback);
+  void setSaveSettingsCallback(SaveSettingsCallback callback);
+
+  // Установка ссылки на настройки (для прямой модификации)
+  void setSettingsReference(Settings* settings);
 
   // Подписка на топики
   void subscribe();
@@ -67,6 +72,10 @@ private:
   // Callback'и
   SettingsUpdateCallback _settingsUpdateCallback;
   CommandCallback _commandCallback;
+  SaveSettingsCallback _saveSettingsCallback;
+
+  // Ссылка на настройки (для прямой модификации)
+  Settings* _settings;
 
   // Статическая функция callback для PubSubClient
   static void mqttCallback(char* topic, byte* payload, unsigned int length);
@@ -77,6 +86,9 @@ private:
   // Внутренняя обработка сообщений
   void handleMessage(char* topic, byte* payload, unsigned int length);
   void handleSetSettings(const String& json);
+  void handleEquipment(const String& json);
+  void handleWindow(const String& json);
+  void handleHydro();
   void handleCommand(const char* topic, const String& value);
 
   // Вспомогательные функции

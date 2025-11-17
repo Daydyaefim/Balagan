@@ -105,6 +105,14 @@ void setup() {
   // Создание MQTT менеджера
   mqttManager = new MqttManager(wifiClient, rtc);
   mqttManager->begin();
+
+  // Установка callback для сохранения настроек
+  mqttManager->setSaveSettingsCallback([](const char* caller) {
+    if (storageManager && controller) {
+      storageManager->saveSettings(controller->getSettings(), caller);
+    }
+  });
+
   setupMQTT();
 
   // Создание менеджера датчиков
@@ -124,6 +132,9 @@ void setup() {
                                          rtc, mtx);
   controller->begin();
   controller->setQueues(qAvg, qSol, qLevel, qWind, qPyrano, qMat, qOutdoor);
+
+  // Установка ссылки на настройки для MQTT
+  mqttManager->setSettingsReference(&controller->getSettings());
 
   // Настройка веб-сервера
   setupWebServer();
@@ -282,10 +293,39 @@ void setupWebServer() {
   });
 
   // API для обновления настроек
-  server.on("/settings", HTTP_POST, [](AsyncWebServerRequest* request) {
-    // Обработка POST запроса (нужно добавить тело обработчика)
-    request->send(200, "text/plain", "Settings updated");
-  });
+  server.on("/settings", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
+    [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (!controller) {
+        request->send(500, "text/plain", "Controller not initialized");
+        return;
+      }
+
+      DynamicJsonDocument doc(2048);
+      DeserializationError error = deserializeJson(doc, data, len);
+
+      if (error) {
+        request->send(400, "text/plain", "Invalid JSON");
+        return;
+      }
+
+      Settings& sett = controller->getSettings();
+      bool needSave = false;
+
+      // Обновление основных параметров
+      if (doc.containsKey("minTemp")) { sett.minTemp = doc["minTemp"]; needSave = true; }
+      if (doc.containsKey("maxTemp")) { sett.maxTemp = doc["maxTemp"]; needSave = true; }
+      if (doc.containsKey("minHum")) { sett.minHum = doc["minHum"]; needSave = true; }
+      if (doc.containsKey("maxHum")) { sett.maxHum = doc["maxHum"]; needSave = true; }
+      if (doc.containsKey("heatOn")) { sett.heatOn = doc["heatOn"]; needSave = true; }
+      if (doc.containsKey("heatOff")) { sett.heatOff = doc["heatOff"]; needSave = true; }
+
+      if (needSave && storageManager) {
+        storageManager->saveSettings(sett, "web_api");
+      }
+
+      request->send(200, "text/plain", "Settings updated");
+    }
+  );
 
   // API для получения данных датчиков
   server.on("/sensors", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -318,6 +358,77 @@ void setupWebServer() {
     serializeJson(doc, json);
     request->send(200, "application/json", json);
   });
+
+  // API для управления окном
+  server.on("/window", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
+    [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (!controller) {
+        request->send(500, "text/plain", "Controller not initialized");
+        return;
+      }
+
+      DynamicJsonDocument doc(256);
+      DeserializationError error = deserializeJson(doc, data, len);
+
+      if (error || !doc.containsKey("direction")) {
+        request->send(400, "text/plain", "Invalid JSON or missing direction");
+        return;
+      }
+
+      String dir = doc["direction"].as<String>();
+      uint32_t dur = doc.containsKey("duration") ? doc["duration"].as<uint32_t>() : 0;
+
+      Settings& sett = controller->getSettings();
+      sett.manualWindow = true;
+      sett.windowCommand = dir;
+      sett.windowDuration = dur;
+
+      request->send(200, "text/plain", "Window command sent");
+    }
+  );
+
+  // API для управления оборудованием
+  server.on("/equipment", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
+    [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+      if (!controller) {
+        request->send(500, "text/plain", "Controller not initialized");
+        return;
+      }
+
+      DynamicJsonDocument doc(256);
+      DeserializationError error = deserializeJson(doc, data, len);
+
+      if (error || !doc.containsKey("equipment") || !doc.containsKey("state")) {
+        request->send(400, "text/plain", "Invalid JSON");
+        return;
+      }
+
+      String eq = doc["equipment"].as<String>();
+      bool state = doc["state"].as<bool>();
+      Settings& sett = controller->getSettings();
+      bool needSave = false;
+
+      if (eq == "fan") {
+        sett.manualFan = true;
+        sett.fanState = state;
+        needSave = true;
+      } else if (eq == "heating") {
+        sett.manualHeat = true;
+        sett.heatState = state;
+        needSave = true;
+      } else if (eq == "watering") {
+        sett.manualPump = true;
+        sett.pumpState = state;
+        needSave = true;
+      }
+
+      if (needSave && storageManager) {
+        storageManager->saveSettings(sett, "web_equipment");
+      }
+
+      request->send(200, "text/plain", "Equipment updated");
+    }
+  );
 }
 
 // ===========================

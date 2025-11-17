@@ -160,30 +160,60 @@ bool StorageManager::isSettingsZeroed(const Settings& settings) {
           settings.openTime == 0 && settings.closeTime == 0);
 }
 
-// Сериализация настроек в JSON (УПРОЩЕННАЯ ВЕРСИЯ - показывает основные поля)
+// Сериализация настроек в JSON (ПОЛНАЯ ВЕРСИЯ)
 bool StorageManager::serializeSettings(const Settings& settings, DynamicJsonDocument& doc) {
-  // Основные параметры
+  // Основные параметры температуры и влажности
   doc["minTemp"] = settings.minTemp;
   doc["maxTemp"] = settings.maxTemp;
   doc["minHum"] = settings.minHum;
   doc["maxHum"] = settings.maxHum;
+
+  // Окна
   doc["openTime"] = settings.openTime;
   doc["closeTime"] = settings.closeTime;
+  doc["manualWindow"] = settings.manualWindow;
+
+  // Отопление
   doc["heatOn"] = settings.heatOn;
   doc["heatOff"] = settings.heatOff;
+  doc["manualHeat"] = settings.manualHeat;
+  doc["heatState"] = settings.heatState;
+
+  // Вентилятор
   doc["fanInterval"] = settings.fanInterval;
   doc["fanDuration"] = settings.fanDuration;
+  doc["manualFan"] = settings.manualFan;
+  doc["fanState"] = settings.fanState;
 
   // Туманообразование
   doc["fogMorningStart"] = settings.fogMorningStart;
   doc["fogMorningEnd"] = settings.fogMorningEnd;
   doc["fogDayStart"] = settings.fogDayStart;
   doc["fogDayEnd"] = settings.fogDayEnd;
+  doc["fogMorningDuration"] = settings.fogMorningDuration;
+  doc["fogMorningInterval"] = settings.fogMorningInterval;
+  doc["fogDayDuration"] = settings.fogDayDuration;
+  doc["fogDayInterval"] = settings.fogDayInterval;
+  doc["fogDelay"] = settings.fogDelay;
+  doc["fogMinHum"] = settings.fogMinHum;
+  doc["fogMaxHum"] = settings.fogMaxHum;
+  doc["fogMinTemp"] = settings.fogMinTemp;
+  doc["fogMaxTemp"] = settings.fogMaxTemp;
+  doc["fogMinDuration"] = settings.fogMinDuration;
+  doc["fogMaxDuration"] = settings.fogMaxDuration;
+  doc["fogMinInterval"] = settings.fogMinInterval;
+  doc["fogMaxInterval"] = settings.fogMaxInterval;
   doc["fogMode"] = settings.fogMode;
+  doc["forceFogOn"] = settings.forceFogOn;
+  doc["autoFogDayStart"] = settings.autoFogDayStart;
+  doc["autoFogDayEnd"] = settings.autoFogDayEnd;
+  doc["fogState"] = settings.fogState;
 
   // Раствор
   doc["solOn"] = settings.solOn;
   doc["solOff"] = settings.solOff;
+  doc["manualSol"] = settings.manualSol;
+  doc["solHeatState"] = settings.solHeatState;
 
   // Ветер
   doc["wind1"] = settings.wind1;
@@ -193,15 +223,63 @@ bool StorageManager::serializeSettings(const Settings& settings, DynamicJsonDocu
   // День/ночь
   doc["nightStart"] = settings.nightStart;
   doc["dayStart"] = settings.dayStart;
+  doc["nightOffset"] = settings.nightOffset;
 
   // Уровень
   doc["levelMin"] = settings.levelMin;
   doc["levelMax"] = settings.levelMax;
+  doc["fillState"] = settings.fillState;
 
-  // Полив
+  // Гидропоника
+  doc["hydroMixDuration"] = settings.hydroMixDuration;
+  doc["hydroMix"] = settings.hydroMix;
+  doc["hydroStart"] = settings.hydroStart;
+  doc["hydroStartUnix"] = settings.hydroStartUnix;
+
+  // Полив - основные параметры
+  doc["manualPump"] = settings.manualPump;
+  doc["previousManualPump"] = settings.previousManualPump;
+  doc["manualPumpOverride"] = settings.manualPumpOverride;
+  doc["pumpState"] = settings.pumpState;
   doc["wateringMode"] = settings.wateringMode;
+  doc["manualWateringInterval"] = settings.manualWateringInterval;
+  doc["manualWateringDuration"] = settings.manualWateringDuration;
   doc["matMinHumidity"] = settings.matMinHumidity;
+  doc["matMaxEC"] = settings.matMaxEC;
   doc["radThreshold"] = settings.radThreshold;
+  doc["pumpTime"] = settings.pumpTime;
+  doc["wateringStartHour"] = settings.wateringStartHour;
+  doc["wateringStartMinute"] = settings.wateringStartMinute;
+  doc["wateringEndHour"] = settings.wateringEndHour;
+  doc["wateringEndMinute"] = settings.wateringEndMinute;
+  doc["maxWateringCycles"] = settings.maxWateringCycles;
+  doc["radSumResetInterval"] = settings.radSumResetInterval;
+  doc["minWateringInterval"] = settings.minWateringInterval;
+  doc["maxWateringInterval"] = settings.maxWateringInterval;
+  doc["forcedWateringDuration"] = settings.forcedWateringDuration;
+  doc["prevWateringMode"] = settings.prevWateringMode;
+  doc["morningWateringCount"] = settings.morningWateringCount;
+  doc["morningWateringInterval"] = settings.morningWateringInterval;
+  doc["morningWateringDuration"] = settings.morningWateringDuration;
+  doc["radCheckInterval"] = settings.radCheckInterval;
+
+  // Состояния полива
+  doc["radSum"] = settings.radSum;
+  doc["cycleCount"] = settings.cycleCount;
+  doc["lastWateringStartUnix"] = settings.lastWateringStartUnix;
+  doc["lastSunTimeUnix"] = settings.lastSunTimeUnix;
+  doc["lastManualWateringTimeUnix"] = settings.lastManualWateringTimeUnix;
+  doc["morningStartedToday"] = settings.morningStartedToday;
+  doc["morningWateringActive"] = settings.morningWateringActive;
+  doc["currentMorningWatering"] = settings.currentMorningWatering;
+  doc["lastMorningWateringStartUnix"] = settings.lastMorningWateringStartUnix;
+  doc["lastMorningWateringEndUnix"] = settings.lastMorningWateringEndUnix;
+  doc["pendingMorningComplete"] = settings.pendingMorningComplete;
+  doc["forceWateringActive"] = settings.forceWateringActive;
+  doc["forceWateringOverride"] = settings.forceWateringOverride;
+  doc["forceWateringEndTime"] = settings.forceWateringEndTime;
+  doc["forceWateringEndTimeUnix"] = settings.forceWateringEndTimeUnix;
+  doc["forcedWateringPerformed"] = settings.forcedWateringPerformed;
 
   // Режимы полива
   JsonArray wmArray = doc.createNestedArray("wateringModes");
@@ -213,34 +291,63 @@ bool StorageManager::serializeSettings(const Settings& settings, DynamicJsonDocu
     wm["duration"] = settings.wateringModes[i].duration;
   }
 
-  // ПРИМЕЧАНИЕ: В полной версии необходимо добавить все остальные поля из структуры Settings
-
   return true;
 }
 
-// Десериализация настроек из JSON (УПРОЩЕННАЯ ВЕРСИЯ)
+// Десериализация настроек из JSON (ПОЛНАЯ ВЕРСИЯ)
 bool StorageManager::deserializeSettings(Settings& settings, const DynamicJsonDocument& doc) {
+  // Основные параметры температуры и влажности
   settings.minTemp = doc["minTemp"] | 20.0f;
   settings.maxTemp = doc["maxTemp"] | 28.0f;
   settings.minHum = doc["minHum"] | 50.0f;
   settings.maxHum = doc["maxHum"] | 90.0f;
+
+  // Окна
   settings.openTime = doc["openTime"] | 156000;
   settings.closeTime = doc["closeTime"] | 156000;
+  settings.manualWindow = doc["manualWindow"] | false;
+
+  // Отопление
   settings.heatOn = doc["heatOn"] | 18.0f;
   settings.heatOff = doc["heatOff"] | 22.0f;
+  settings.manualHeat = doc["manualHeat"] | false;
+  settings.heatState = doc["heatState"] | false;
+
+  // Вентилятор
   settings.fanInterval = doc["fanInterval"] | (30 * 60 * 1000UL);
   settings.fanDuration = doc["fanDuration"] | (5 * 60 * 1000UL);
+  settings.manualFan = doc["manualFan"] | false;
+  settings.fanState = doc["fanState"] | false;
 
   // Туманообразование
   settings.fogMorningStart = doc["fogMorningStart"] | 7;
   settings.fogMorningEnd = doc["fogMorningEnd"] | 8;
   settings.fogDayStart = doc["fogDayStart"] | 8;
   settings.fogDayEnd = doc["fogDayEnd"] | 16;
+  settings.fogMorningDuration = doc["fogMorningDuration"] | (10 * 1000UL);
+  settings.fogMorningInterval = doc["fogMorningInterval"] | (30 * 60 * 1000UL);
+  settings.fogDayDuration = doc["fogDayDuration"] | (10 * 1000UL);
+  settings.fogDayInterval = doc["fogDayInterval"] | (2 * 60 * 1000UL);
+  settings.fogDelay = doc["fogDelay"] | (30 * 1000UL);
+  settings.fogMinHum = doc["fogMinHum"] | 60.0f;
+  settings.fogMaxHum = doc["fogMaxHum"] | 95.0f;
+  settings.fogMinTemp = doc["fogMinTemp"] | 18.0f;
+  settings.fogMaxTemp = doc["fogMaxTemp"] | 30.0f;
+  settings.fogMinDuration = doc["fogMinDuration"] | (5 * 1000UL);
+  settings.fogMaxDuration = doc["fogMaxDuration"] | (30 * 1000UL);
+  settings.fogMinInterval = doc["fogMinInterval"] | (10 * 60 * 1000UL);
+  settings.fogMaxInterval = doc["fogMaxInterval"] | (2 * 60 * 60 * 1000UL);
   settings.fogMode = doc["fogMode"] | 0;
+  settings.forceFogOn = doc["forceFogOn"] | false;
+  settings.autoFogDayStart = doc["autoFogDayStart"] | 10;
+  settings.autoFogDayEnd = doc["autoFogDayEnd"] | 17;
+  settings.fogState = doc["fogState"] | false;
 
   // Раствор
   settings.solOn = doc["solOn"] | 18.0f;
   settings.solOff = doc["solOff"] | 22.0f;
+  settings.manualSol = doc["manualSol"] | false;
+  settings.solHeatState = doc["solHeatState"] | false;
 
   // Ветер
   settings.wind1 = doc["wind1"] | 5.0f;
@@ -250,15 +357,66 @@ bool StorageManager::deserializeSettings(Settings& settings, const DynamicJsonDo
   // День/ночь
   settings.nightStart = doc["nightStart"] | 22;
   settings.dayStart = doc["dayStart"] | 6;
+  settings.nightOffset = doc["nightOffset"] | 2.0f;
 
   // Уровень
   settings.levelMin = doc["levelMin"] | 10.0f;
   settings.levelMax = doc["levelMax"] | 90.0f;
+  settings.fillState = doc["fillState"] | false;
 
-  // Полив
+  // Гидропоника
+  settings.hydroMixDuration = doc["hydroMixDuration"] | (10 * 60 * 1000UL);
+  settings.hydroMix = doc["hydroMix"] | false;
+  settings.hydroStart = doc["hydroStart"] | 0;
+  settings.hydroStartUnix = doc["hydroStartUnix"] | 0UL;
+
+  // Полив - основные параметры
+  settings.manualPump = doc["manualPump"] | false;
+  settings.previousManualPump = doc["previousManualPump"] | false;
+  settings.manualPumpOverride = doc["manualPumpOverride"] | false;
+  settings.pumpState = doc["pumpState"] | false;
   settings.wateringMode = doc["wateringMode"] | 0;
-  settings.matMinHumidity = doc["matMinHumidity"] | 60.0f;
-  settings.radThreshold = doc["radThreshold"] | 100.0f;
+  settings.manualWateringInterval = doc["manualWateringInterval"] | (60 * 60 * 1000UL);
+  settings.manualWateringDuration = doc["manualWateringDuration"] | 30000UL;
+  settings.matMinHumidity = doc["matMinHumidity"] | 40.0f;
+  settings.matMaxEC = doc["matMaxEC"] | 3.0f;
+  settings.radThreshold = doc["radThreshold"] | 10.0f;
+  settings.pumpTime = doc["pumpTime"] | 30000UL;
+  settings.wateringStartHour = doc["wateringStartHour"] | 9;
+  settings.wateringStartMinute = doc["wateringStartMinute"] | 0;
+  settings.wateringEndHour = doc["wateringEndHour"] | 17;
+  settings.wateringEndMinute = doc["wateringEndMinute"] | 0;
+  settings.maxWateringCycles = doc["maxWateringCycles"] | 15;
+  settings.radSumResetInterval = doc["radSumResetInterval"] | (30 * 60 * 1000UL);
+  settings.minWateringInterval = doc["minWateringInterval"] | (60 * 60 * 1000UL);
+  settings.maxWateringInterval = doc["maxWateringInterval"] | (90UL * 60 * 1000);
+  settings.forcedWateringDuration = doc["forcedWateringDuration"] | 30000UL;
+  settings.prevWateringMode = doc["prevWateringMode"] | 0;
+  settings.morningWateringCount = doc["morningWateringCount"] | 0;
+  settings.morningWateringInterval = doc["morningWateringInterval"] | (40 * 60 * 1000UL);
+  settings.morningWateringDuration = doc["morningWateringDuration"] | (180 * 1000UL);
+  settings.radCheckInterval = doc["radCheckInterval"] | (60 * 1000UL);
+  if (settings.radCheckInterval == 0) {
+    settings.radCheckInterval = 60 * 1000UL;
+  }
+
+  // Состояния полива
+  settings.radSum = doc["radSum"] | 0.0f;
+  settings.cycleCount = doc["cycleCount"] | 0;
+  settings.lastWateringStartUnix = doc["lastWateringStartUnix"] | 0UL;
+  settings.lastSunTimeUnix = doc["lastSunTimeUnix"] | 0UL;
+  settings.lastManualWateringTimeUnix = doc["lastManualWateringTimeUnix"] | 0UL;
+  settings.morningStartedToday = doc["morningStartedToday"] | false;
+  settings.morningWateringActive = doc["morningWateringActive"] | false;
+  settings.currentMorningWatering = doc["currentMorningWatering"] | 0;
+  settings.lastMorningWateringStartUnix = doc["lastMorningWateringStartUnix"] | 0UL;
+  settings.lastMorningWateringEndUnix = doc["lastMorningWateringEndUnix"] | 0UL;
+  settings.pendingMorningComplete = doc["pendingMorningComplete"] | false;
+  settings.forceWateringActive = doc["forceWateringActive"] | false;
+  settings.forceWateringOverride = doc["forceWateringOverride"] | false;
+  settings.forceWateringEndTime = doc["forceWateringEndTime"] | 0UL;
+  settings.forceWateringEndTimeUnix = doc["forceWateringEndTimeUnix"] | 0UL;
+  settings.forcedWateringPerformed = doc["forcedWateringPerformed"] | false;
 
   // Режимы полива
   JsonArray wmArray = doc["wateringModes"];
@@ -266,13 +424,19 @@ bool StorageManager::deserializeSettings(Settings& settings, const DynamicJsonDo
     for (int i = 0; i < 4; i++) {
       JsonObject wm = wmArray[i];
       settings.wateringModes[i].enabled = wm["enabled"] | false;
-      settings.wateringModes[i].startHour = wm["startHour"] | 8;
-      settings.wateringModes[i].endHour = wm["endHour"] | 18;
-      settings.wateringModes[i].duration = wm["duration"] | (5 * 60 * 1000UL);
+      settings.wateringModes[i].startHour = wm["startHour"] | 0;
+      settings.wateringModes[i].endHour = wm["endHour"] | 0;
+      settings.wateringModes[i].duration = wm["duration"] | 0;
+    }
+  } else {
+    // Если массив неправильного размера, инициализируем дефолтными значениями
+    for (int i = 0; i < 4; i++) {
+      settings.wateringModes[i].enabled = false;
+      settings.wateringModes[i].startHour = 0;
+      settings.wateringModes[i].endHour = 0;
+      settings.wateringModes[i].duration = 0;
     }
   }
-
-  // ПРИМЕЧАНИЕ: В полной версии необходимо добавить все остальные поля
 
   return true;
 }
