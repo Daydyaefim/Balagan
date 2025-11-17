@@ -79,6 +79,7 @@ private:
   bool _fogValveOn;
   uint32_t _fogValveStartTime;
   uint32_t _lastFanChange;
+  uint32_t _fanStartTimestamp;
   uint32_t _lastHeatChange;
   uint32_t _lastSolHeatChange;
   uint32_t _lastWindowMoveCommand;
@@ -91,6 +92,9 @@ private:
   uint32_t _lastRadCheck;
   float _lastAvgTemp;
   float _lastAvgHum;
+  uint32_t _lastAutoWateringCheck;
+  uint32_t _lastManualPeriodicCheck;
+  bool _forcedPumpStarted;
 
   // Константы
   static const uint32_t MIN_STATE_CHANGE_INTERVAL = 5000;
@@ -117,6 +121,7 @@ private:
   // Вспомогательные функции расчета
   float calcFogDuration(float hum, float temp) const;
   float calcFogInterval(float hum, float temp) const;
+  float mapFloat(float x, float inMin, float inMax, float outMin, float outMax) const;
 };
 
 // Задача FreeRTOS для логики управления
