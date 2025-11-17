@@ -419,14 +419,24 @@ bool StorageManager::deserializeSettings(Settings& settings, const DynamicJsonDo
   settings.forcedWateringPerformed = doc["forcedWateringPerformed"] | false;
 
   // Режимы полива
-  JsonArray wmArray = doc["wateringModes"].as<JsonArray>();
-  if (!wmArray.isNull() && wmArray.size() == 4) {
-    for (int i = 0; i < 4; i++) {
-      JsonObject wm = wmArray[i];
-      settings.wateringModes[i].enabled = wm["enabled"] | false;
-      settings.wateringModes[i].startHour = wm["startHour"] | 0;
-      settings.wateringModes[i].endHour = wm["endHour"] | 0;
-      settings.wateringModes[i].duration = wm["duration"] | 0;
+  if (doc.containsKey("wateringModes") && doc["wateringModes"].is<JsonArray>()) {
+    JsonArrayConst wmArray = doc["wateringModes"].as<JsonArrayConst>();
+    if (wmArray.size() == 4) {
+      for (int i = 0; i < 4; i++) {
+        JsonObjectConst wm = wmArray[i];
+        settings.wateringModes[i].enabled = wm["enabled"] | false;
+        settings.wateringModes[i].startHour = wm["startHour"] | 0;
+        settings.wateringModes[i].endHour = wm["endHour"] | 0;
+        settings.wateringModes[i].duration = wm["duration"] | 0;
+      }
+    } else {
+      // Если массив неправильного размера, инициализируем дефолтными значениями
+      for (int i = 0; i < 4; i++) {
+        settings.wateringModes[i].enabled = false;
+        settings.wateringModes[i].startHour = 0;
+        settings.wateringModes[i].endHour = 0;
+        settings.wateringModes[i].duration = 0;
+      }
     }
   } else {
     // Если массив неправильного размера, инициализируем дефолтными значениями
