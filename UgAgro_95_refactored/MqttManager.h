@@ -35,7 +35,7 @@ public:
   bool connect();
 
   // Проверка подключения
-  bool isConnected() const;
+  bool isConnected();
 
   // Публикация данных датчиков
   void publishAllSensors(const SensorData& avgData, float sol, float level, float wind,

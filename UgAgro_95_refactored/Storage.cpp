@@ -419,8 +419,8 @@ bool StorageManager::deserializeSettings(Settings& settings, const DynamicJsonDo
   settings.forcedWateringPerformed = doc["forcedWateringPerformed"] | false;
 
   // Режимы полива
-  JsonArray wmArray = doc["wateringModes"];
-  if (wmArray.size() == 4) {
+  JsonArray wmArray = doc["wateringModes"].as<JsonArray>();
+  if (!wmArray.isNull() && wmArray.size() == 4) {
     for (int i = 0; i < 4; i++) {
       JsonObject wm = wmArray[i];
       settings.wateringModes[i].enabled = wm["enabled"] | false;

@@ -50,7 +50,7 @@ bool MqttManager::connect() {
 }
 
 // Проверка подключения
-bool MqttManager::isConnected() const {
+bool MqttManager::isConnected() {
   return _client.connected();
 }
 
