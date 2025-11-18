@@ -34,7 +34,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const readings = $input.all().map(i => i.json);\nconst latest = readings.length > 0 ? readings[readings.length - 1] : { temperature: 0, humidity: 0, water_level: 0, wind_speed: 0 };\nconst chartData = { labels: readings.map(r => r.timestamp_iso), temperature: readings.map(r => parseFloat(r.temperature)), humidity: readings.map(r => parseFloat(r.humidity)), water_level: readings.map(r => parseFloat(r.water_level)), wind_speed: readings.map(r => parseFloat(r.wind_speed)) };\nreturn { latest, chartData, count: readings.length };"
+        "jsCode": "const readings = $input.all().map(i => i.json);\nconst defaultData = { temperature: 0, humidity: 0, water_level: 0, wind_speed: 0 };\nlet latest;\nif (readings.length > 0) {\n  const lastReading = readings[readings.length - 1];\n  latest = {\n    temperature: parseFloat(lastReading.temperature) || 0,\n    humidity: parseFloat(lastReading.humidity) || 0,\n    water_level: parseFloat(lastReading.water_level) || 0,\n    wind_speed: parseFloat(lastReading.wind_speed) || 0\n  };\n} else {\n  latest = defaultData;\n}\nconst chartData = { labels: readings.map(r => r.timestamp_iso), temperature: readings.map(r => parseFloat(r.temperature) || 0), humidity: readings.map(r => parseFloat(r.humidity) || 0), water_level: readings.map(r => parseFloat(r.water_level) || 0), wind_speed: readings.map(r => parseFloat(r.wind_speed) || 0) };\nreturn [{ json: { latest, chartData, count: readings.length } }];"
       },
       "id": "prepare-data",
       "name": "Подготовить Данные",
@@ -128,5 +128,5 @@
   "tags": [],
   "triggerCount": 0,
   "updatedAt": "2025-01-18T00:00:00.000Z",
-  "versionId": "4"
+  "versionId": "5"
 }
