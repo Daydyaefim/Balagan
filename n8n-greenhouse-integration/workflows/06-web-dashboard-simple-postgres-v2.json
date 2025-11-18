@@ -34,7 +34,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Подготовка данных\nconst readings = $input.all().map(i => i.json);\n\n// Значения по умолчанию если нет данных\nconst defaultData = {\n  temperature: 0,\n  humidity: 0,\n  water_level: 0,\n  wind_speed: 0\n};\n\nconst latest = readings.length > 0 ? readings[readings.length - 1] : defaultData;\n\nconst chartData = {\n  labels: readings.map(r => r.timestamp_iso),\n  temperature: readings.map(r => parseFloat(r.temperature)),\n  humidity: readings.map(r => parseFloat(r.humidity)),\n  water_level: readings.map(r => parseFloat(r.water_level)),\n  wind_speed: readings.map(r => parseFloat(r.wind_speed))\n};\n\nreturn [{\n  json: {\n    latest: latest,\n    chartData: chartData,\n    count: readings.length\n  }\n}];"
+        "jsCode": "// Подготовка данных\nconst readings = $input.all().map(i => i.json);\n\n// Значения по умолчанию если нет данных\nconst defaultData = {\n  temperature: 0,\n  humidity: 0,\n  water_level: 0,\n  wind_speed: 0\n};\n\n// Получаем последнее показание и преобразуем все значения в числа\nlet latest;\nif (readings.length > 0) {\n  const lastReading = readings[readings.length - 1];\n  latest = {\n    temperature: parseFloat(lastReading.temperature) || 0,\n    humidity: parseFloat(lastReading.humidity) || 0,\n    water_level: parseFloat(lastReading.water_level) || 0,\n    wind_speed: parseFloat(lastReading.wind_speed) || 0\n  };\n} else {\n  latest = defaultData;\n}\n\nconst chartData = {\n  labels: readings.map(r => r.timestamp_iso),\n  temperature: readings.map(r => parseFloat(r.temperature) || 0),\n  humidity: readings.map(r => parseFloat(r.humidity) || 0),\n  water_level: readings.map(r => parseFloat(r.water_level) || 0),\n  wind_speed: readings.map(r => parseFloat(r.wind_speed) || 0)\n};\n\nreturn [{\n  json: {\n    latest: latest,\n    chartData: chartData,\n    count: readings.length\n  }\n}];"
       },
       "id": "prepare-data",
       "name": "Подготовить Данные",
@@ -132,5 +132,5 @@
   "tags": [],
   "triggerCount": 0,
   "updatedAt": "2025-01-18T00:00:00.000Z",
-  "versionId": "1"
+  "versionId": "2"
 }
