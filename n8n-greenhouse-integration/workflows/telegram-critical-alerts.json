@@ -111,13 +111,13 @@
                     {
                       "button": {
                         "text": "✅ Подтвердить",
-                        "callbackData": "=ack_{{ $json.alert_type }}"
+                        "callbackData": "={{ 'ack_' + $json.alert_type }}"
                       }
                     },
                     {
                       "button": {
                         "text": "🔕 Отключить на 1ч",
-                        "callbackData": "=mute_{{ $json.alert_type }}_1h"
+                        "callbackData": "={{ 'mute_' + $json.alert_type + '_1h' }}"
                       }
                     }
                   ]
