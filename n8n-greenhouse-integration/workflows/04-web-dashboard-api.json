@@ -5,6 +5,7 @@
       "parameters": {
         "httpMethod": "GET",
         "path": "api/readings",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "webhook-trigger",

@@ -45,7 +45,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Добавление нового показания в БД с ротацией 7 дней\nconst newReading = $input.first().json;\n\nlet readings = [];\ntry {\n  const dbContent = $node[\"Читать БД\"].json.data;\n  if (dbContent) {\n    readings = typeof dbContent === 'string' ? JSON.parse(dbContent) : dbContent;\n  }\n} catch (e) {\n  console.log('БД пуста или повреждена, создаем новую');\n  readings = [];\n}\n\n// Добавляем новое показание\nreadings.push(newReading);\n\n// Ротация: хранить только последние 7 дней\nconst sevenDaysAgo = Date.now() / 1000 - (7 * 24 * 60 * 60);\nreadings = readings.filter(r => r.timestamp > sevenDaysAgo);\n\n// Сортировка по timestamp\nreadings.sort((a, b) => a.timestamp - b.timestamp);\n\nreturn { json: { readings } };"
+        "jsCode": "// Добавление нового показания в БД с ротацией 7 дней\nconst newReading = $input.first().json;\n\nlet readings = [];\ntry {\n  const dbData = $node[\"Читать БД\"]?.json?.data;\n  if (dbData) {\n    const parsed = typeof dbData === 'string' ? JSON.parse(dbData) : dbData;\n    // Проверяем что это массив\n    if (Array.isArray(parsed)) {\n      readings = parsed;\n    } else {\n      console.log('БД содержит некорректные данные, создаем новую');\n      readings = [];\n    }\n  }\n} catch (e) {\n  console.log('БД пуста или повреждена, создаем новую:', e.message);\n  readings = [];\n}\n\n// Добавляем новое показание\nreadings.push(newReading);\n\n// Ротация: хранить только последние 7 дней\nconst sevenDaysAgo = Date.now() / 1000 - (7 * 24 * 60 * 60);\nreadings = readings.filter(r => {\n  // Проверяем что объект имеет timestamp\n  if (r && typeof r === 'object' && r.timestamp) {\n    return r.timestamp > sevenDaysAgo;\n  }\n  return false;\n});\n\n// Сортировка по timestamp\nreadings.sort((a, b) => {\n  const aTime = a.timestamp || 0;\n  const bTime = b.timestamp || 0;\n  return aTime - bTime;\n});\n\nreturn { json: { readings } };"
       },
       "id": "update-db",
       "name": "Обновить БД",
@@ -70,7 +70,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Отправить сигнал обновления для веб-дашборда\nconst reading = $input.first().json.readings;\nconst latest = reading[reading.length - 1];\n\nreturn { json: { \n  event: 'new_reading',\n  data: latest,\n  timestamp: new Date().toISOString()\n} };"
+        "jsCode": "// Отправить сигнал обновления для веб-дашборда\nconst readings = $input.first().json.readings;\n\n// Проверяем что readings это массив и не пустой\nif (!Array.isArray(readings) || readings.length === 0) {\n  console.log('Нет данных для отправки');\n  return { json: { \n    event: 'new_reading',\n    data: null,\n    timestamp: new Date().toISOString()\n  } };\n}\n\nconst latest = readings[readings.length - 1];\n\nreturn { json: { \n  event: 'new_reading',\n  data: latest,\n  timestamp: new Date().toISOString()\n} };"
       },
       "id": "prepare-websocket",
       "name": "Подготовить WebSocket",
@@ -144,5 +144,5 @@
   "tags": [],
   "triggerCount": 1,
   "updatedAt": "2025-01-18T00:00:00.000Z",
-  "versionId": "1"
+  "versionId": "2"
 }
