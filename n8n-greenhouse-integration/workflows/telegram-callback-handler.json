@@ -53,15 +53,25 @@
     },
     {
       "parameters": {
+        "jsCode": "// Подготовка SQL для подтверждения\nconst alertType = $json.alert_type || 'unknown';\n\nconst sqlQuery = `UPDATE telegram_alert_states\nSET \n  acknowledged_at = NOW(),\n  is_active = false,\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';\n\nSELECT alert_type, acknowledged_at FROM telegram_alert_states WHERE alert_type = '${alertType}';`;\n\nreturn [{ json: { ...($json), sql_query: sqlQuery } }];"
+      },
+      "id": "prepare-ack-sql",
+      "name": "Подготовить SQL Подтверждения",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
         "operation": "executeQuery",
-        "query": "={{ \n  const alertType = $json.alert_type || 'unknown';\n  return `UPDATE telegram_alert_states\nSET \n  acknowledged_at = NOW(),\n  is_active = false,\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';\n\nSELECT alert_type, acknowledged_at FROM telegram_alert_states WHERE alert_type = '${alertType}';`;\n}}",
+        "query": "={{ $json.sql_query }}",
         "options": {}
       },
       "id": "acknowledge-alert",
       "name": "Подтвердить Оповещение",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [900, 200],
+      "position": [1120, 200],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -71,15 +81,25 @@
     },
     {
       "parameters": {
+        "jsCode": "// Подготовка SQL для отключения\nconst alertType = $json.alert_type || 'unknown';\nconst muteDuration = $json.mute_duration || 1;\n\nconst sqlQuery = `UPDATE telegram_alert_states\nSET \n  mute_until = NOW() + INTERVAL '${muteDuration} hours',\n  is_active = false,\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';\n\nSELECT alert_type, mute_until FROM telegram_alert_states WHERE alert_type = '${alertType}';`;\n\nreturn [{ json: { ...($json), sql_query: sqlQuery } }];"
+      },
+      "id": "prepare-mute-sql",
+      "name": "Подготовить SQL Отключения",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
         "operation": "executeQuery",
-        "query": "={{ \n  const alertType = $json.alert_type || 'unknown';\n  const muteDuration = $json.mute_duration || 1;\n  return `UPDATE telegram_alert_states\nSET \n  mute_until = NOW() + INTERVAL '${muteDuration} hours',\n  is_active = false,\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';\n\nSELECT alert_type, mute_until FROM telegram_alert_states WHERE alert_type = '${alertType}';`;\n}}",
+        "query": "={{ $json.sql_query }}",
         "options": {}
       },
       "id": "mute-alert",
       "name": "Отключить Оповещение",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [900, 400],
+      "position": [1120, 400],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -95,7 +115,7 @@
       "name": "Форматировать Ответ",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1120, 300]
+      "position": [1340, 300]
     },
     {
       "parameters": {
@@ -110,7 +130,7 @@
       "name": "Ответить на Callback",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1340, 300],
+      "position": [1560, 300],
       "credentials": {
         "telegramApi": {
           "id": "telegram_bot",
@@ -132,7 +152,7 @@
       "name": "Изменить Сообщение",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1560, 300],
+      "position": [1780, 300],
       "credentials": {
         "telegramApi": {
           "id": "telegram_bot",
@@ -168,11 +188,33 @@
       "main": [
         [
           {
-            "node": "Подтвердить Оповещение",
+            "node": "Подготовить SQL Подтверждения",
             "type": "main",
             "index": 0
           }
         ],
+        [
+          {
+            "node": "Подготовить SQL Отключения",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подготовить SQL Подтверждения": {
+      "main": [
+        [
+          {
+            "node": "Подтвердить Оповещение",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подготовить SQL Отключения": {
+      "main": [
         [
           {
             "node": "Отключить Оповещение",

@@ -141,15 +141,25 @@
     },
     {
       "parameters": {
+        "jsCode": "// Подготовка SQL запроса для обновления состояния\nconst alertType = $json.alert_type || 'unknown';\nconst currentValue = $json.current_value || 0;\nconst message = ($json.message || '').replace(/'/g, \"''\");\n\nconst sqlQuery = `UPDATE telegram_alert_states\nSET \n  is_active = true,\n  last_sent_at = NOW(),\n  current_value = ${currentValue},\n  alert_count = alert_count + 1,\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';\n\n-- Добавить в историю если новое\nINSERT INTO ugagro_alerts_history (\n  alert_type,\n  alert_message,\n  sensor_value,\n  severity,\n  created_at\n) VALUES (\n  '${alertType}',\n  '${message}',\n  ${currentValue},\n  'critical',\n  NOW()\n);`;\n\nreturn [{ json: { sql_query: sqlQuery, alert_type: alertType } }];"
+      },
+      "id": "prepare-update-sql",
+      "name": "Подготовить SQL Обновления",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
         "operation": "executeQuery",
-        "query": "={{ \n  const alertType = $json.alert_type || 'unknown';\n  const currentValue = $json.current_value || 0;\n  const message = ($json.message || '').replace(/'/g, \"''\");\n  \n  return `UPDATE telegram_alert_states\nSET \n  is_active = true,\n  last_sent_at = NOW(),\n  current_value = ${currentValue},\n  alert_count = alert_count + 1,\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';\n\n-- Добавить в историю если новое\nINSERT INTO ugagro_alerts_history (\n  alert_type,\n  alert_message,\n  sensor_value,\n  severity,\n  created_at\n) VALUES (\n  '${alertType}',\n  '${message}',\n  ${currentValue},\n  'critical',\n  NOW()\n);`;\n}}",
+        "query": "={{ $json.sql_query }}",
         "options": {}
       },
       "id": "update-state",
       "name": "Обновить Состояние",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1780, 200],
+      "position": [2000, 200],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -159,15 +169,25 @@
     },
     {
       "parameters": {
+        "jsCode": "// Подготовка SQL запроса для деактивации\nconst alertType = $json.alert_type || 'unknown';\n\nconst sqlQuery = `UPDATE telegram_alert_states\nSET \n  is_active = false,\n  acknowledged_at = NOW(),\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';`;\n\nreturn [{ json: { sql_query: sqlQuery, alert_type: alertType } }];"
+      },
+      "id": "prepare-deactivate-sql",
+      "name": "Подготовить SQL Деактивации",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
         "operation": "executeQuery",
-        "query": "={{ \n  const alertType = $json.alert_type || 'unknown';\n  return `UPDATE telegram_alert_states\nSET \n  is_active = false,\n  acknowledged_at = NOW(),\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';`;\n}}",
+        "query": "={{ $json.sql_query }}",
         "options": {}
       },
       "id": "deactivate-alert",
       "name": "Деактивировать Оповещение",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1340, 400],
+      "position": [1560, 400],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -232,7 +252,7 @@
         ],
         [
           {
-            "node": "Деактивировать Оповещение",
+            "node": "Подготовить SQL Деактивации",
             "type": "main",
             "index": 0
           }
@@ -254,7 +274,29 @@
       "main": [
         [
           {
+            "node": "Подготовить SQL Обновления",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подготовить SQL Обновления": {
+      "main": [
+        [
+          {
             "node": "Обновить Состояние",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подготовить SQL Деактивации": {
+      "main": [
+        [
+          {
+            "node": "Деактивировать Оповещение",
             "type": "main",
             "index": 0
           }
