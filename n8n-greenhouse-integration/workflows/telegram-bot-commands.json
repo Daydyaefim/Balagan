@@ -1,0 +1,183 @@
+{
+  "name": "Telegram Bot - Commands",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"]
+      },
+      "id": "telegram-trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "telegram-ugagro-bot",
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "UgAgro Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/status",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/статус",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "check-command",
+      "name": "Проверка Команды",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ugagro_readings\nORDER BY timestamp DESC\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "get-latest-data",
+      "name": "Получить Последние Данные",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 200],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst chatId = $node[\"Telegram Trigger\"].json.message.chat.id;\n\n// Функция для определения эмодзи статуса\nfunction getStatusEmoji(type, value) {\n  const thresholds = {\n    temperature: { min: 10, max: 40 },\n    humidity: { min: 20, max: 85 },\n    water_level: { min: 5 },\n    wind_speed: { max: 11 }\n  };\n  \n  if (type === 'temperature') {\n    if (value < thresholds.temperature.min || value > thresholds.temperature.max) return '🔴';\n    return '🟢';\n  } else if (type === 'humidity') {\n    if (value < thresholds.humidity.min || value > thresholds.humidity.max) return '🔴';\n    return '🟢';\n  } else if (type === 'water_level') {\n    if (value < thresholds.water_level.min) return '🔴';\n    if (value < 15) return '🟡';\n    return '🟢';\n  } else if (type === 'wind_speed') {\n    if (value > thresholds.wind_speed.max) return '🔴';\n    if (value > 8) return '🟡';\n    return '🟢';\n  }\n  return '⚪';\n}\n\n// Преобразуем все значения в числа\nconst temp = parseFloat(data.temperature) || 0;\nconst hum = parseFloat(data.humidity) || 0;\nconst water = parseFloat(data.water_level) || 0;\nconst wind = parseFloat(data.wind_speed) || 0;\nconst outdoorTemp = parseFloat(data.outdoor_temperature) || null;\nconst outdoorHum = parseFloat(data.outdoor_humidity) || null;\n\n// Формируем сообщение\nconst message = `🌱 *UGAGRO 95 - СТАТУС ТЕПЛИЦЫ*\n\n📊 *ОСНОВНЫЕ ПОКАЗАТЕЛИ:*\n\n${getStatusEmoji('temperature', temp)} *Температура:* ${temp.toFixed(1)}°C\n   └ Норма: 10-40°C\n\n${getStatusEmoji('humidity', hum)} *Влажность:* ${hum.toFixed(1)}%\n   └ Норма: 20-85%\n\n${getStatusEmoji('water_level', water)} *Уровень воды:* ${water.toFixed(1)}%\n   └ Критично: <5%, Внимание: <15%\n\n${getStatusEmoji('wind_speed', wind)} *Скорость ветра:* ${wind.toFixed(1)} м/с\n   └ Критично: >11 м/с, Внимание: >8 м/с\n\n━━━━━━━━━━━━━━━━━━━━━\n\n🌡️ *УЛИЦА:*\n   Температура: ${outdoorTemp ? outdoorTemp.toFixed(1) + '°C' : 'н/д'}\n   Влажность: ${outdoorHum ? outdoorHum.toFixed(1) + '%' : 'н/д'}\n\n⚙️ *ОБОРУДОВАНИЕ:*\n   ${data.fan_state ? '✅' : '❌'} Вентилятор\n   ${data.heat_state ? '✅' : '❌'} Обогрев\n   ${data.pump_state ? '✅' : '❌'} Насос\n   ${data.fog_state ? '✅' : '❌'} Туман\n\n🪟 *Окно:* ${data.window_position || 0}%\n☀️ *Пиранометр:* ${parseFloat(data.pyrano || 0).toFixed(0)} Вт/м²\n\n🕒 *Обновлено:* ${new Date(data.timestamp_iso).toLocaleString('ru-RU')}\n\n━━━━━━━━━━━━━━━━━━━━━\n🟢 - Норма  🟡 - Внимание  🔴 - Критично\n\nℹ️ Используйте /status для обновления`;\n\nreturn [{\n  json: {\n    chatId: chatId,\n    message: message\n  }\n}];"
+      },
+      "id": "format-status",
+      "name": "Форматировать Статус",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parseMode": "Markdown"
+        }
+      },
+      "id": "send-telegram",
+      "name": "Отправить в Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1120, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "UgAgro Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.message.chat.id }}",
+        "text": "❓ Неизвестная команда.\\n\\nДоступные команды:\\n/status - Показать статус теплицы\\n/статус - То же самое",
+        "additionalFields": {}
+      },
+      "id": "send-unknown",
+      "name": "Неизвестная Команда",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [680, 400],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "UgAgro Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Проверка Команды",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Проверка Команды": {
+      "main": [
+        [
+          {
+            "node": "Получить Последние Данные",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Неизвестная Команда",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Получить Последние Данные": {
+      "main": [
+        [
+          {
+            "node": "Форматировать Статус",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Форматировать Статус": {
+      "main": [
+        [
+          {
+            "node": "Отправить в Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-18T00:00:00.000Z",
+  "versionId": "1"
+}

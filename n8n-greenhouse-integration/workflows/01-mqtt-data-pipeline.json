@@ -1,5 +1,5 @@
 {
-  "name": "01 - MQTT Data Pipeline",
+  "name": "01 - MQTT Data Pipeline (PostgreSQL)",
   "nodes": [
     {
       "parameters": {
@@ -22,7 +22,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Парсинг и валидация MQTT данных\nconst item = $input.first();\n\n// Проверка что входные данные существуют\nif (!item || !item.json) {\n  throw new Error('Нет входных данных от MQTT');\n}\n\n// ДИАГНОСТИКА: Логируем что именно пришло\nconsole.log('=== MQTT RAW DATA ===');\nconsole.log('item.json:', JSON.stringify(item.json, null, 2));\n\n// Безопасное извлечение payload\nlet payload;\n\n// Вариант 1: Данные в item.json.payload (строка или объект)\nif (item.json.payload !== undefined) {\n  console.log('Используем item.json.payload');\n  payload = typeof item.json.payload === 'string' \n    ? JSON.parse(item.json.payload) \n    : item.json.payload;\n}\n// Вариант 2: Данные в item.json.message\nelse if (item.json.message !== undefined) {\n  console.log('Используем item.json.message');\n  payload = typeof item.json.message === 'string'\n    ? JSON.parse(item.json.message)\n    : item.json.message;\n}\n// Вариант 3: Данные напрямую в item.json\nelse {\n  console.log('Используем item.json напрямую');\n  payload = item.json;\n}\n\nconsole.log('Extracted payload:', JSON.stringify(payload, null, 2));\n\n// Проверка что payload это объект\nif (!payload || typeof payload !== 'object') {\n  throw new Error('Некорректный формат MQTT данных: ' + typeof payload);\n}\n\n// Валидация обязательных полей\nconst requiredFields = ['timestamp', 'temperature', 'humidity', 'water_level', 'wind_speed'];\nconst missingFields = [];\n\nfor (const field of requiredFields) {\n  if (payload[field] === undefined || payload[field] === null) {\n    missingFields.push(field);\n  }\n}\n\nif (missingFields.length > 0) {\n  console.log('Missing fields:', missingFields);\n  console.log('Available fields:', Object.keys(payload));\n  throw new Error(`Отсутствуют обязательные поля: ${missingFields.join(', ')}. Доступные поля: ${Object.keys(payload).join(', ')}`);\n}\n\n// Добавляем ISO timestamp для удобства\npayload.timestamp_iso = new Date(payload.timestamp * 1000).toISOString();\npayload.received_at = new Date().toISOString();\n\nconsole.log('✅ Валидация успешна');\nreturn { json: payload };"
+        "jsCode": "// Парсинг и валидация MQTT данных\nconst item = $input.first();\n\n// Проверка что входные данные существуют\nif (!item || !item.json) {\n  throw new Error('Нет входных данных от MQTT');\n}\n\n// Безопасное извлечение payload\nlet payload;\n\n// Вариант 1: Данные в item.json.payload (строка или объект)\nif (item.json.payload !== undefined) {\n  payload = typeof item.json.payload === 'string' \n    ? JSON.parse(item.json.payload) \n    : item.json.payload;\n}\n// Вариант 2: Данные в item.json.message\nelse if (item.json.message !== undefined) {\n  payload = typeof item.json.message === 'string'\n    ? JSON.parse(item.json.message)\n    : item.json.message;\n}\n// Вариант 3: Данные напрямую в item.json\nelse {\n  payload = item.json;\n}\n\n// Проверка что payload это объект\nif (!payload || typeof payload !== 'object') {\n  throw new Error('Некорректный формат MQTT данных: ' + typeof payload);\n}\n\n// Валидация обязательных полей\nconst requiredFields = ['timestamp', 'temperature', 'humidity', 'water_level', 'wind_speed'];\nconst missingFields = [];\n\nfor (const field of requiredFields) {\n  if (payload[field] === undefined || payload[field] === null) {\n    missingFields.push(field);\n  }\n}\n\nif (missingFields.length > 0) {\n  throw new Error(`Отсутствуют обязательные поля: ${missingFields.join(', ')}. Доступные поля: ${Object.keys(payload).join(', ')}`);\n}\n\n// Добавляем ISO timestamp для удобства\npayload.timestamp_iso = new Date(payload.timestamp * 1000).toISOString();\npayload.received_at = new Date().toISOString();\n\nconsole.log('✅ Получены данные от ESP32:', payload.timestamp_iso);\nreturn { json: payload };"
       },
       "id": "parse-validate",
       "name": "Парсинг и Валидация",
@@ -32,51 +32,21 @@
     },
     {
       "parameters": {
-        "operation": "read",
-        "filePath": "/data/ugagro_readings.json",
+        "operation": "executeQuery",
+        "query": "INSERT INTO ugagro_readings (\n  timestamp, timestamp_iso, received_at,\n  temperature, humidity, water_level, wind_speed,\n  pyrano, solution_temperature, outdoor_temperature, outdoor_humidity,\n  mat_temperature, mat_hum, mat_ec, mat_ph,\n  window_position, fan_state, heat_state, pump_state, fog_state,\n  sol_heat_state, hydro_mix, fill_state,\n  watering_mode, rad_sum, cycle_count, last_watering_start_unix,\n  force_watering_active, force_watering_override, force_watering_end_time_unix\n) VALUES (\n  {{ $json.timestamp }},\n  '{{ $json.timestamp_iso }}',\n  '{{ $json.received_at }}',\n  {{ $json.temperature }},\n  {{ $json.humidity }},\n  {{ $json.water_level }},\n  {{ $json.wind_speed }},\n  {{ $json.pyrano || 0 }},\n  {{ $json.solution_temperature || 'NULL' }},\n  {{ $json.outdoor_temperature || 'NULL' }},\n  {{ $json.outdoor_humidity || 'NULL' }},\n  {{ $json.mat_temperature || 'NULL' }},\n  {{ $json.mat_hum || 'NULL' }},\n  {{ $json.mat_ec || 'NULL' }},\n  {{ $json.mat_ph || 'NULL' }},\n  {{ $json.window_position || 0 }},\n  {{ $json.fan_state || false }},\n  {{ $json.heat_state || false }},\n  {{ $json.pump_state || false }},\n  {{ $json.fog_state || false }},\n  {{ $json.sol_heat_state || false }},\n  {{ $json.hydro_mix || false }},\n  {{ $json.fill_state || false }},\n  {{ $json.watering_mode || 0 }},\n  {{ $json.rad_sum || 0 }},\n  {{ $json.cycle_count || 0 }},\n  {{ $json.last_watering_start_unix || 'NULL' }},\n  {{ $json.force_watering_active || false }},\n  {{ $json.force_watering_override || false }},\n  {{ $json.force_watering_end_time_unix || 'NULL' }}\n)\nON CONFLICT (timestamp) DO UPDATE SET\n  temperature = EXCLUDED.temperature,\n  humidity = EXCLUDED.humidity,\n  water_level = EXCLUDED.water_level,\n  wind_speed = EXCLUDED.wind_speed,\n  received_at = EXCLUDED.received_at;\n\nSELECT * FROM ugagro_readings ORDER BY timestamp DESC LIMIT 1;",
         "options": {}
       },
-      "id": "read-db",
-      "name": "Читать БД",
-      "type": "n8n-nodes-base.readWriteFile",
-      "typeVersion": 1,
+      "id": "save-to-postgres",
+      "name": "Сохранить в PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
       "position": [650, 300],
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "jsCode": "// Добавление нового показания в БД с ротацией 7 дней\nconst newReading = $input.first()?.json;\n\n// Проверка валидности нового показания\nif (!newReading || typeof newReading !== 'object' || !newReading.timestamp) {\n  console.log('Получено невалидное показание, пропускаем');\n  return { json: { readings: [] } };\n}\n\nlet readings = [];\ntry {\n  const dbData = $node[\"Читать БД\"]?.json?.data;\n  if (dbData) {\n    const parsed = typeof dbData === 'string' ? JSON.parse(dbData) : dbData;\n    // Проверяем что это массив\n    if (Array.isArray(parsed)) {\n      readings = parsed;\n    } else {\n      console.log('БД содержит некорректные данные, создаем новую');\n      readings = [];\n    }\n  }\n} catch (e) {\n  console.log('БД пуста или повреждена, создаем новую:', e.message);\n  readings = [];\n}\n\n// Добавляем новое показание\nreadings.push(newReading);\n\n// Ротация: хранить только последние 7 дней\nconst sevenDaysAgo = Date.now() / 1000 - (7 * 24 * 60 * 60);\nreadings = readings.filter(r => {\n  // Проверяем что объект имеет timestamp\n  if (r && typeof r === 'object' && r.timestamp) {\n    return r.timestamp > sevenDaysAgo;\n  }\n  return false;\n});\n\n// Сортировка по timestamp\nreadings.sort((a, b) => {\n  const aTime = a.timestamp || 0;\n  const bTime = b.timestamp || 0;\n  return aTime - bTime;\n});\n\nreturn { json: { readings } };"
-      },
-      "id": "update-db",
-      "name": "Обновить БД",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [850, 300]
-    },
-    {
-      "parameters": {
-        "operation": "write",
-        "filePath": "/data/ugagro_readings.json",
-        "fileContent": "={{ JSON.stringify($json.readings, null, 2) }}",
-        "options": {
-          "encoding": "utf8"
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
         }
-      },
-      "id": "save-db",
-      "name": "Сохранить БД",
-      "type": "n8n-nodes-base.readWriteFile",
-      "typeVersion": 1,
-      "position": [1050, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Отправить сигнал обновления для веб-дашборда\nconst readings = $input.first().json.readings;\n\n// Проверяем что readings это массив и не пустой\nif (!Array.isArray(readings) || readings.length === 0) {\n  console.log('Нет данных для отправки');\n  return { json: { \n    event: 'new_reading',\n    data: null,\n    timestamp: new Date().toISOString()\n  } };\n}\n\nconst latest = readings[readings.length - 1];\n\nreturn { json: { \n  event: 'new_reading',\n  data: latest,\n  timestamp: new Date().toISOString()\n} };"
-      },
-      "id": "prepare-websocket",
-      "name": "Подготовить WebSocket",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1250, 300]
+      }
     }
   ],
   "connections": {
@@ -95,40 +65,7 @@
       "main": [
         [
           {
-            "node": "Читать БД",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Читать БД": {
-      "main": [
-        [
-          {
-            "node": "Обновить БД",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Обновить БД": {
-      "main": [
-        [
-          {
-            "node": "Сохранить БД",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Сохранить БД": {
-      "main": [
-        [
-          {
-            "node": "Подготовить WebSocket",
+            "node": "Сохранить в PostgreSQL",
             "type": "main",
             "index": 0
           }
@@ -144,5 +81,5 @@
   "tags": [],
   "triggerCount": 1,
   "updatedAt": "2025-01-18T00:00:00.000Z",
-  "versionId": "4"
+  "versionId": "5"
 }

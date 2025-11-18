@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS telegram_alert_states (
     is_active BOOLEAN DEFAULT FALSE,
     last_sent_at TIMESTAMP,
     acknowledged_at TIMESTAMP,
+    mute_until TIMESTAMP,
     alert_count INTEGER DEFAULT 0,
     current_value DECIMAL(10,2),
     threshold_value DECIMAL(10,2),

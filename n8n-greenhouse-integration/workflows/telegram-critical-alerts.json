@@ -1,0 +1,274 @@
+{
+  "name": "Telegram - Critical Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 20
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Every 20 Seconds",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ugagro_readings\nORDER BY timestamp DESC\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "get-latest",
+      "name": "Получить Последние Данные",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM telegram_alert_states;",
+        "options": {}
+      },
+      "id": "get-alert-states",
+      "name": "Получить Состояния Оповещений",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 300],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const reading = $node[\"Получить Последние Данные\"].json;\nconst states = $input.all().map(i => i.json);\n\n// Преобразуем в map для быстрого доступа\nconst statesMap = {};\nstates.forEach(s => {\n  statesMap[s.alert_type] = s;\n});\n\n// Пороговые значения\nconst thresholds = {\n  high_temperature: { field: 'temperature', max: 40, message: '🔥 КРИТИЧНО! Температура слишком высокая' },\n  low_temperature: { field: 'temperature', min: 10, message: '❄️ КРИТИЧНО! Температура слишком низкая' },\n  high_humidity: { field: 'humidity', max: 85, message: '💧 КРИТИЧНО! Влажность слишком высокая' },\n  low_humidity: { field: 'humidity', min: 20, message: '🏜️ КРИТИЧНО! Влажность слишком низкая' },\n  low_water_level: { field: 'water_level', min: 5, message: '🚨 КРИТИЧНО! Уровень воды очень низкий!' },\n  high_wind_speed: { field: 'wind_speed', max: 11, message: '💨 КРИТИЧНО! Слишком сильный ветер!' }\n};\n\nconst alerts = [];\n\n// Проверяем каждое условие\nfor (const [alertType, config] of Object.entries(thresholds)) {\n  const value = parseFloat(reading[config.field]) || 0;\n  const state = statesMap[alertType];\n  \n  let isCritical = false;\n  \n  // Проверяем пороги\n  if (config.max !== undefined && value > config.max) {\n    isCritical = true;\n  }\n  if (config.min !== undefined && value < config.min) {\n    isCritical = true;\n  }\n  \n  // Проверяем mute_until (если отключено на время)\n  const isMuted = state && state.mute_until && new Date(state.mute_until) > new Date();\n  \n  // Если критично и не подтверждено и не отключено\n  if (isCritical && (!state || !state.is_active || !state.acknowledged_at) && !isMuted) {\n    alerts.push({\n      alert_type: alertType,\n      message: config.message,\n      field: config.field,\n      current_value: value,\n      threshold_min: config.min,\n      threshold_max: config.max,\n      timestamp: reading.timestamp_iso,\n      is_new: !state || !state.is_active\n    });\n  }\n  \n  // Если не критично но оповещение активно - деактивируем\n  if (!isCritical && state && state.is_active) {\n    alerts.push({\n      alert_type: alertType,\n      action: 'deactivate'\n    });\n  }\n}\n\nif (alerts.length === 0) {\n  // Нет оповещений\n  return [];\n}\n\nreturn alerts.map(a => ({ json: a }));"
+      },
+      "id": "check-thresholds",
+      "name": "Проверка Порогов",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "deactivate",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "filter-active-alerts",
+      "name": "Только Активные",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $json;\nconst reading = $node[\"Получить Последние Данные\"].json;\n\n// Формируем детальное сообщение\nlet message = `${alert.message}\\n\\n`;\nmessage += `📊 *Текущее значение:* ${alert.current_value.toFixed(1)}\\n`;\n\nif (alert.threshold_min !== undefined) {\n  message += `⚠️ *Минимум:* ${alert.threshold_min}\\n`;\n}\nif (alert.threshold_max !== undefined) {\n  message += `⚠️ *Максимум:* ${alert.threshold_max}\\n`;\n}\n\nmessage += `\\n🕒 *Время:* ${new Date(alert.timestamp).toLocaleString('ru-RU')}\\n`;\nmessage += `\\n━━━━━━━━━━━━━━━━━━━━━\\n`;\nmessage += `\\n📋 *ВСЕ ПОКАЗАТЕЛИ:*\\n`;\nmessage += `🌡️ Температура: ${parseFloat(reading.temperature).toFixed(1)}°C\\n`;\nmessage += `💧 Влажность: ${parseFloat(reading.humidity).toFixed(1)}%\\n`;\nmessage += `💦 Уровень воды: ${parseFloat(reading.water_level).toFixed(1)}%\\n`;\nmessage += `💨 Ветер: ${parseFloat(reading.wind_speed).toFixed(1)} м/с\\n`;\n\nreturn [{\n  json: {\n    message: message,\n    alert_type: alert.alert_type,\n    current_value: alert.current_value,\n    is_new: alert.is_new\n  }\n}];"
+      },
+      "id": "format-alert",
+      "name": "Форматировать Оповещение",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "chatId": "=УКАЖИТЕ_ВАШ_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parseMode": "Markdown",
+          "replyMarkup": "inlineKeyboard",
+          "inlineKeyboard": {
+            "rows": [
+              {
+                "row": {
+                  "buttons": [
+                    {
+                      "button": {
+                        "text": "✅ Подтвердить",
+                        "callbackData": "=ack_{{ $json.alert_type }}"
+                      }
+                    },
+                    {
+                      "button": {
+                        "text": "🔕 Отключить на 1ч",
+                        "callbackData": "=mute_{{ $json.alert_type }}_1h"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "id": "send-alert",
+      "name": "Отправить Оповещение",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1560, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "UgAgro Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE telegram_alert_states\nSET \n  is_active = true,\n  last_sent_at = NOW(),\n  current_value = {{ $json.current_value }},\n  alert_count = alert_count + 1,\n  updated_at = NOW()\nWHERE alert_type = '{{ $json.alert_type }}';\n\n-- Добавить в историю если новое\nINSERT INTO ugagro_alerts_history (\n  alert_type,\n  alert_message,\n  sensor_value,\n  severity,\n  created_at\n) VALUES (\n  '{{ $json.alert_type }}',\n  '{{ $json.message }}',\n  {{ $json.current_value }},\n  'critical',\n  NOW()\n);",
+        "options": {}
+      },
+      "id": "update-state",
+      "name": "Обновить Состояние",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1780, 200],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE telegram_alert_states\nSET \n  is_active = false,\n  acknowledged_at = NOW(),\n  updated_at = NOW()\nWHERE alert_type = '{{ $json.alert_type }}';",
+        "options": {}
+      },
+      "id": "deactivate-alert",
+      "name": "Деактивировать Оповещение",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1340, 400],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Every 20 Seconds": {
+      "main": [
+        [
+          {
+            "node": "Получить Последние Данные",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Получить Последние Данные": {
+      "main": [
+        [
+          {
+            "node": "Получить Состояния Оповещений",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Получить Состояния Оповещений": {
+      "main": [
+        [
+          {
+            "node": "Проверка Порогов",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Проверка Порогов": {
+      "main": [
+        [
+          {
+            "node": "Только Активные",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Только Активные": {
+      "main": [
+        [
+          {
+            "node": "Форматировать Оповещение",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Деактивировать Оповещение",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Форматировать Оповещение": {
+      "main": [
+        [
+          {
+            "node": "Отправить Оповещение",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Отправить Оповещение": {
+      "main": [
+        [
+          {
+            "node": "Обновить Состояние",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-18T00:00:00.000Z",
+  "versionId": "1"
+}
