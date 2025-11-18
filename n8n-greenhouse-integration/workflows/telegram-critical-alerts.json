@@ -109,9 +109,9 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.telegram.org/bot{{ $credentials.accessToken }}/sendMessage",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "telegramApi",
+        "url": "=https://api.telegram.org/bot{{ $credentials.telegramApi.accessToken }}/sendMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "telegramApi",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
