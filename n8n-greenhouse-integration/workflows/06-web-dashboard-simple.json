@@ -1,0 +1,127 @@
+{
+  "name": "06 - Web Dashboard (Simple)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "dashboard",
+        "options": {}
+      },
+      "id": "webhook-dashboard",
+      "name": "Webhook Dashboard",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "greenhouse-dashboard"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "filePath": "/home/USERNAME/greenhouse-data/ugagro_readings.json",
+        "options": {}
+      },
+      "id": "read-data",
+      "name": "Читать Данные",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Подготовка данных для дашборда\nlet readings = [];\ntry {\n  const dbData = $node[\"Читать Данные\"].json.data;\n  if (dbData) {\n    readings = typeof dbData === 'string' ? JSON.parse(dbData) : dbData;\n  }\n} catch (e) {\n  readings = [];\n}\n\n// Последние 24 часа\nconst cutoffTime = Date.now() / 1000 - (24 * 60 * 60);\nconst filtered = readings.filter(r => r.timestamp > cutoffTime);\n\n// Последнее показание\nconst latest = filtered[filtered.length - 1] || {\n  temperature: 0,\n  humidity: 0,\n  water_level: 0,\n  wind_speed: 0,\n  outdoor_temperature: 0,\n  outdoor_humidity: 0,\n  solution_temperature: 0,\n  pyrano: 0,\n  window_position: 0,\n  fan_state: false,\n  heat_state: false,\n  pump_state: false\n};\n\n// Данные для графиков\nconst chartData = {\n  labels: filtered.map(r => r.timestamp_iso || new Date(r.timestamp * 1000).toISOString()),\n  temperature: filtered.map(r => r.temperature || 0),\n  humidity: filtered.map(r => r.humidity || 0),\n  water_level: filtered.map(r => r.water_level || 0),\n  wind_speed: filtered.map(r => r.wind_speed || 0),\n  outdoor_temperature: filtered.map(r => r.outdoor_temperature || null),\n  outdoor_humidity: filtered.map(r => r.outdoor_humidity || null)\n};\n\nreturn [{\n  json: {\n    latest,\n    chartData,\n    count: filtered.length\n  }\n}];"
+      },
+      "id": "prepare-data",
+      "name": "Подготовить Данные",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Генерация HTML страницы\nconst data = $json;\nconst latest = data.latest;\nconst chartData = data.chartData;\n\n// Функция для определения статуса сенсора\nfunction getSensorStatus(type, value) {\n  const thresholds = {\n    temperature: { min: 10, max: 40 },\n    humidity: { min: 20, max: 85 },\n    water_level: { min: 5 },\n    wind_speed: { max: 11 }\n  };\n  \n  if (type === 'temperature') {\n    if (value < thresholds.temperature.min || value > thresholds.temperature.max) return 'critical';\n  } else if (type === 'humidity') {\n    if (value < thresholds.humidity.min || value > thresholds.humidity.max) return 'critical';\n  } else if (type === 'water_level') {\n    if (value < thresholds.water_level.min) return 'critical';\n    if (value < 15) return 'warning';\n  } else if (type === 'wind_speed') {\n    if (value > thresholds.wind_speed.max) return 'critical';\n    if (value > 8) return 'warning';\n  }\n  return 'normal';\n}\n\nconst tempStatus = getSensorStatus('temperature', latest.temperature);\nconst humStatus = getSensorStatus('humidity', latest.humidity);\nconst waterStatus = getSensorStatus('water_level', latest.water_level);\nconst windStatus = getSensorStatus('wind_speed', latest.wind_speed);\n\nconst html = `<!DOCTYPE html>\n<html lang=\"ru\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>UgAgro 95 - Мониторинг Теплицы</title>\n    <link href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css\" rel=\"stylesheet\">\n    <script src=\"https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js\"></script>\n    <style>\n        body { background-color: #f5f7fa; font-family: 'Segoe UI', sans-serif; }\n        .sensor-card { border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s; }\n        .sensor-card:hover { transform: translateY(-5px); }\n        .sensor-card.normal { border-left: 4px solid #28a745; }\n        .sensor-card.warning { border-left: 4px solid #ffc107; background-color: #fff9e6; }\n        .sensor-card.critical { border-left: 4px solid #dc3545; background-color: #ffe6e6; }\n        .sensor-icon { font-size: 3rem; opacity: 0.3; }\n        .sensor-card.normal .sensor-icon { color: #28a745; opacity: 0.5; }\n        .sensor-card.warning .sensor-icon { color: #ffc107; opacity: 0.5; }\n        .sensor-card.critical .sensor-icon { color: #dc3545; opacity: 0.5; }\n        canvas { max-height: 300px; }\n        .navbar { box-shadow: 0 2px 4px rgba(0,0,0,0.1); }\n    </style>\n</head>\n<body>\n    <nav class=\"navbar navbar-dark bg-success\">\n        <div class=\"container-fluid\">\n            <span class=\"navbar-brand mb-0 h1\">🌱 UgAgro 95 - Умная Теплица</span>\n            <span class=\"badge bg-light text-dark\">⚫ Подключено</span>\n        </div>\n    </nav>\n\n    <div class=\"container-fluid py-4\">\n        <!-- Карточки датчиков -->\n        <div class=\"row mb-4\">\n            <div class=\"col-md-3 col-sm-6 mb-3\">\n                <div class=\"card sensor-card ${tempStatus}\">\n                    <div class=\"card-body\">\n                        <div class=\"d-flex justify-content-between align-items-center\">\n                            <div>\n                                <h6 class=\"text-muted mb-1\">Температура</h6>\n                                <h2 class=\"mb-0\">${latest.temperature.toFixed(1)}</h2>\n                                <small class=\"text-muted\">°C</small>\n                            </div>\n                            <div class=\"sensor-icon\">🌡️</div>\n                        </div>\n                        <div class=\"mt-2\"><small class=\"text-muted\">Норма: 10-40°C</small></div>\n                    </div>\n                </div>\n            </div>\n\n            <div class=\"col-md-3 col-sm-6 mb-3\">\n                <div class=\"card sensor-card ${humStatus}\">\n                    <div class=\"card-body\">\n                        <div class=\"d-flex justify-content-between align-items-center\">\n                            <div>\n                                <h6 class=\"text-muted mb-1\">Влажность</h6>\n                                <h2 class=\"mb-0\">${latest.humidity.toFixed(1)}</h2>\n                                <small class=\"text-muted\">%</small>\n                            </div>\n                            <div class=\"sensor-icon\">💧</div>\n                        </div>\n                        <div class=\"mt-2\"><small class=\"text-muted\">Норма: 20-85%</small></div>\n                    </div>\n                </div>\n            </div>\n\n            <div class=\"col-md-3 col-sm-6 mb-3\">\n                <div class=\"card sensor-card ${waterStatus}\">\n                    <div class=\"card-body\">\n                        <div class=\"d-flex justify-content-between align-items-center\">\n                            <div>\n                                <h6 class=\"text-muted mb-1\">Уровень Воды</h6>\n                                <h2 class=\"mb-0\">${latest.water_level.toFixed(1)}</h2>\n                                <small class=\"text-muted\">%</small>\n                            </div>\n                            <div class=\"sensor-icon\">🌊</div>\n                        </div>\n                        <div class=\"mt-2\"><small class=\"text-muted\">Критично: &lt;5%</small></div>\n                    </div>\n                </div>\n            </div>\n\n            <div class=\"col-md-3 col-sm-6 mb-3\">\n                <div class=\"card sensor-card ${windStatus}\">\n                    <div class=\"card-body\">\n                        <div class=\"d-flex justify-content-between align-items-center\">\n                            <div>\n                                <h6 class=\"text-muted mb-1\">Скорость Ветра</h6>\n                                <h2 class=\"mb-0\">${latest.wind_speed.toFixed(1)}</h2>\n                                <small class=\"text-muted\">м/с</small>\n                            </div>\n                            <div class=\"sensor-icon\">💨</div>\n                        </div>\n                        <div class=\"mt-2\"><small class=\"text-muted\">Макс: 11 м/с</small></div>\n                    </div>\n                </div>\n            </div>\n        </div>\n\n        <!-- Дополнительная информация -->\n        <div class=\"row mb-4\">\n            <div class=\"col-md-12\">\n                <div class=\"card\">\n                    <div class=\"card-header bg-success text-white\">\n                        <h5 class=\"mb-0\">ℹ️ Дополнительные Показания</h5>\n                    </div>\n                    <div class=\"card-body\">\n                        <div class=\"row\">\n                            <div class=\"col-md-3 col-sm-6 mb-2\">\n                                <strong>Температура улицы:</strong> ${latest.outdoor_temperature?.toFixed(1) || '--'}°C\n                            </div>\n                            <div class=\"col-md-3 col-sm-6 mb-2\">\n                                <strong>Влажность улицы:</strong> ${latest.outdoor_humidity?.toFixed(1) || '--'}%\n                            </div>\n                            <div class=\"col-md-3 col-sm-6 mb-2\">\n                                <strong>Температура раствора:</strong> ${latest.solution_temperature?.toFixed(1) || '--'}°C\n                            </div>\n                            <div class=\"col-md-3 col-sm-6 mb-2\">\n                                <strong>Пиранометр:</strong> ${latest.pyrano?.toFixed(0) || '--'} Вт/м²\n                            </div>\n                        </div>\n                        <div class=\"row mt-2\">\n                            <div class=\"col-md-3 col-sm-6 mb-2\">\n                                <strong>Позиция окна:</strong> ${latest.window_position || '--'}%\n                            </div>\n                            <div class=\"col-md-3 col-sm-6 mb-2\">\n                                <strong>Вентилятор:</strong> <span class=\"badge ${latest.fan_state ? 'bg-success' : 'bg-secondary'}\">${latest.fan_state ? 'ВКЛ' : 'ВЫКЛ'}</span>\n                            </div>\n                            <div class=\"col-md-3 col-sm-6 mb-2\">\n                                <strong>Обогрев:</strong> <span class=\"badge ${latest.heat_state ? 'bg-success' : 'bg-secondary'}\">${latest.heat_state ? 'ВКЛ' : 'ВЫКЛ'}</span>\n                            </div>\n                            <div class=\"col-md-3 col-sm-6 mb-2\">\n                                <strong>Насос:</strong> <span class=\"badge ${latest.pump_state ? 'bg-success' : 'bg-secondary'}\">${latest.pump_state ? 'ВКЛ' : 'ВЫКЛ'}</span>\n                            </div>\n                        </div>\n                    </div>\n                </div>\n            </div>\n        </div>\n\n        <!-- Графики -->\n        <div class=\"row mb-4\">\n            <div class=\"col-md-6 mb-3\">\n                <div class=\"card\">\n                    <div class=\"card-header bg-success text-white\">\n                        <h5 class=\"mb-0\">📈 Температура (24 часа)</h5>\n                    </div>\n                    <div class=\"card-body\"><canvas id=\"chart-temp\"></canvas></div>\n                </div>\n            </div>\n            <div class=\"col-md-6 mb-3\">\n                <div class=\"card\">\n                    <div class=\"card-header bg-success text-white\">\n                        <h5 class=\"mb-0\">📈 Влажность (24 часа)</h5>\n                    </div>\n                    <div class=\"card-body\"><canvas id=\"chart-hum\"></canvas></div>\n                </div>\n            </div>\n            <div class=\"col-md-6 mb-3\">\n                <div class=\"card\">\n                    <div class=\"card-header bg-success text-white\">\n                        <h5 class=\"mb-0\">📈 Уровень Воды (24 часа)</h5>\n                    </div>\n                    <div class=\"card-body\"><canvas id=\"chart-water\"></canvas></div>\n                </div>\n            </div>\n            <div class=\"col-md-6 mb-3\">\n                <div class=\"card\">\n                    <div class=\"card-header bg-success text-white\">\n                        <h5 class=\"mb-0\">📈 Скорость Ветра (24 часа)</h5>\n                    </div>\n                    <div class=\"card-body\"><canvas id=\"chart-wind\"></canvas></div>\n                </div>\n            </div>\n        </div>\n\n        <div class=\"row\">\n            <div class=\"col-md-12 text-center text-muted\">\n                <small>Обновить страницу для актуальных данных</small><br>\n                <button class=\"btn btn-sm btn-success mt-2\" onclick=\"location.reload()\">🔄 Обновить</button>\n            </div>\n        </div>\n    </div>\n\n    <script>\n        const chartData = ${JSON.stringify(chartData)};\n        \n        const labels = chartData.labels.map(label => {\n            const date = new Date(label);\n            return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });\n        });\n\n        const commonOptions = {\n            responsive: true,\n            maintainAspectRatio: true,\n            plugins: { legend: { display: true, position: 'top' } },\n            scales: {\n                x: { display: true, ticks: { maxTicksLimit: 8 } },\n                y: { display: true }\n            }\n        };\n\n        new Chart(document.getElementById('chart-temp'), {\n            type: 'line',\n            data: {\n                labels: labels,\n                datasets: [\n                    { label: 'Температура (°C)', data: chartData.temperature, borderColor: '#dc3545', backgroundColor: 'rgba(220,53,69,0.1)', tension: 0.4, fill: true },\n                    { label: 'Температура улицы (°C)', data: chartData.outdoor_temperature, borderColor: '#007bff', backgroundColor: 'rgba(0,123,255,0.1)', tension: 0.4, fill: false, borderDash: [5,5] }\n                ]\n            },\n            options: commonOptions\n        });\n\n        new Chart(document.getElementById('chart-hum'), {\n            type: 'line',\n            data: {\n                labels: labels,\n                datasets: [\n                    { label: 'Влажность (%)', data: chartData.humidity, borderColor: '#17a2b8', backgroundColor: 'rgba(23,162,184,0.1)', tension: 0.4, fill: true },\n                    { label: 'Влажность улицы (%)', data: chartData.outdoor_humidity, borderColor: '#6c757d', backgroundColor: 'rgba(108,117,125,0.1)', tension: 0.4, fill: false, borderDash: [5,5] }\n                ]\n            },\n            options: commonOptions\n        });\n\n        new Chart(document.getElementById('chart-water'), {\n            type: 'line',\n            data: {\n                labels: labels,\n                datasets: [{ label: 'Уровень воды (%)', data: chartData.water_level, borderColor: '#007bff', backgroundColor: 'rgba(0,123,255,0.1)', tension: 0.4, fill: true }]\n            },\n            options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, min: 0, max: 100 } } }\n        });\n\n        new Chart(document.getElementById('chart-wind'), {\n            type: 'line',\n            data: {\n                labels: labels,\n                datasets: [{ label: 'Скорость ветра (м/с)', data: chartData.wind_speed, borderColor: '#28a745', backgroundColor: 'rgba(40,167,69,0.1)', tension: 0.4, fill: true }]\n            },\n            options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, min: 0 } } }\n        });\n    </script>\n</body>\n</html>`;\n\nreturn [{ json: { html } }];"
+      },
+      "id": "generate-html",
+      "name": "Генерация HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-html",
+      "name": "Вернуть HTML",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Читать Данные",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Читать Данные": {
+      "main": [
+        [
+          {
+            "node": "Подготовить Данные",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подготовить Данные": {
+      "main": [
+        [
+          {
+            "node": "Генерация HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Генерация HTML": {
+      "main": [
+        [
+          {
+            "node": "Вернуть HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-18T00:00:00.000Z",
+  "versionId": "1"
+}
