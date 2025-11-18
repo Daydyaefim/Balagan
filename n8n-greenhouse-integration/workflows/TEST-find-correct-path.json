@@ -1,0 +1,72 @@
+{
+  "name": "TEST - Find Correct File Path",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Тестируем разные пути для записи файла\nconst testData = {\n  test: \"Это тестовый файл\",\n  timestamp: new Date().toISOString(),\n  message: \"Если вы видите этот файл - путь работает!\"\n};\n\nconst pathsToTry = [\n  \"/data/test.json\",\n  \"/files/test.json\",\n  \"/shared/test.json\",\n  \"/tmp/test.json\",\n  \"./test.json\",\n  \"/root/.n8n/test.json\"\n];\n\nreturn pathsToTry.map(path => ({\n  json: {\n    filePath: path,\n    content: JSON.stringify(testData, null, 2)\n  }\n}));"
+      },
+      "id": "generate-test-paths",
+      "name": "Генерация Тестовых Путей",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "filePath": "={{ $json.filePath }}",
+        "fileContent": "={{ $json.content }}",
+        "options": {}
+      },
+      "id": "write-test-file",
+      "name": "Записать Тестовый Файл",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Анализ результатов\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const hasError = item.json.error !== undefined;\n  results.push({\n    path: item.json.filePath || 'unknown',\n    success: !hasError,\n    error: hasError ? item.json.error.message : null\n  });\n}\n\nconst successfulPaths = results.filter(r => r.success);\nconst failedPaths = results.filter(r => !r.success);\n\nreturn [{\n  json: {\n    summary: `Проверено путей: ${results.length}, успешно: ${successfulPaths.length}, ошибок: ${failedPaths.length}`,\n    successfulPaths: successfulPaths.map(p => p.path),\n    failedPaths: failedPaths.map(p => ({ path: p.path, error: p.error })),\n    recommendation: successfulPaths.length > 0 \n      ? `✅ ИСПОЛЬЗУЙТЕ ПУТЬ: ${successfulPaths[0].path.replace('/test.json', '')}` \n      : '❌ Ни один путь не сработал. Проверьте настройки Docker volumes'\n  }\n}];"
+      },
+      "id": "analyze-results",
+      "name": "Анализ Результатов",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Генерация Тестовых Путей": {
+      "main": [
+        [
+          {
+            "node": "Записать Тестовый Файл",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Записать Тестовый Файл": {
+      "main": [
+        [
+          {
+            "node": "Анализ Результатов",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-18T00:00:00.000Z",
+  "versionId": "1"
+}
