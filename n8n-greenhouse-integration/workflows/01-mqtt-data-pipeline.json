@@ -1,0 +1,148 @@
+{
+  "name": "01 - MQTT Data Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "topic": "greenhouse/esp32/all_sensors",
+        "options": {
+          "parallelProcessing": false
+        }
+      },
+      "id": "mqtt-trigger",
+      "name": "MQTT Trigger",
+      "type": "n8n-nodes-base.mqttTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "credentials": {
+        "mqtt": {
+          "id": "1",
+          "name": "MQTT Broker"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Парсинг и валидация MQTT данных\nconst item = $input.first();\nconst payload = typeof item.json.payload === 'string' \n  ? JSON.parse(item.json.payload) \n  : item.json.payload;\n\n// Валидация обязательных полей\nconst requiredFields = ['timestamp', 'temperature', 'humidity', 'water_level', 'wind_speed'];\nfor (const field of requiredFields) {\n  if (payload[field] === undefined || payload[field] === null) {\n    throw new Error(`Отсутствует обязательное поле: ${field}`);\n  }\n}\n\n// Добавляем ISO timestamp для удобства\npayload.timestamp_iso = new Date(payload.timestamp * 1000).toISOString();\npayload.received_at = new Date().toISOString();\n\nreturn { json: payload };"
+      },
+      "id": "parse-validate",
+      "name": "Парсинг и Валидация",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "filePath": "/data/ugagro_readings.json",
+        "options": {}
+      },
+      "id": "read-db",
+      "name": "Читать БД",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Добавление нового показания в БД с ротацией 7 дней\nconst newReading = $input.first().json;\n\nlet readings = [];\ntry {\n  const dbContent = $node[\"Читать БД\"].json.data;\n  if (dbContent) {\n    readings = typeof dbContent === 'string' ? JSON.parse(dbContent) : dbContent;\n  }\n} catch (e) {\n  console.log('БД пуста или повреждена, создаем новую');\n  readings = [];\n}\n\n// Добавляем новое показание\nreadings.push(newReading);\n\n// Ротация: хранить только последние 7 дней\nconst sevenDaysAgo = Date.now() / 1000 - (7 * 24 * 60 * 60);\nreadings = readings.filter(r => r.timestamp > sevenDaysAgo);\n\n// Сортировка по timestamp\nreadings.sort((a, b) => a.timestamp - b.timestamp);\n\nreturn { json: { readings } };"
+      },
+      "id": "update-db",
+      "name": "Обновить БД",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "filePath": "/data/ugagro_readings.json",
+        "fileContent": "={{ JSON.stringify($json.readings, null, 2) }}",
+        "options": {
+          "encoding": "utf8"
+        }
+      },
+      "id": "save-db",
+      "name": "Сохранить БД",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Отправить сигнал обновления для веб-дашборда\nconst reading = $input.first().json.readings;\nconst latest = reading[reading.length - 1];\n\nreturn { json: { \n  event: 'new_reading',\n  data: latest,\n  timestamp: new Date().toISOString()\n} };"
+      },
+      "id": "prepare-websocket",
+      "name": "Подготовить WebSocket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "MQTT Trigger": {
+      "main": [
+        [
+          {
+            "node": "Парсинг и Валидация",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Парсинг и Валидация": {
+      "main": [
+        [
+          {
+            "node": "Читать БД",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Читать БД": {
+      "main": [
+        [
+          {
+            "node": "Обновить БД",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Обновить БД": {
+      "main": [
+        [
+          {
+            "node": "Сохранить БД",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Сохранить БД": {
+      "main": [
+        [
+          {
+            "node": "Подготовить WebSocket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-18T00:00:00.000Z",
+  "versionId": "1"
+}

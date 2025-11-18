@@ -1,0 +1,30 @@
+# Environment variables
+.env
+
+# Data directory
+data/*.json
+data/*.log
+
+# Node modules (если используется)
+node_modules/
+
+# n8n data (если локально)
+.n8n/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+tmp/
+temp/

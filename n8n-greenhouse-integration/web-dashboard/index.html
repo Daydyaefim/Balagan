@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UgAgro 95 - Мониторинг Теплицы</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-success">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="bi bi-flower1"></i> UgAgro 95 - Умная Теплица
+            </span>
+            <span class="badge bg-light text-dark" id="connection-status">
+                <i class="bi bi-circle-fill text-success"></i> Подключено
+            </span>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <!-- Карточки текущих показаний -->
+        <div class="row mb-4">
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card sensor-card" id="card-temperature">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Температура</h6>
+                                <h2 class="mb-0" id="temp-value">--</h2>
+                                <small class="text-muted">°C</small>
+                            </div>
+                            <div class="sensor-icon">
+                                <i class="bi bi-thermometer-half"></i>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">Норма: 10-40°C</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card sensor-card" id="card-humidity">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Влажность</h6>
+                                <h2 class="mb-0" id="hum-value">--</h2>
+                                <small class="text-muted">%</small>
+                            </div>
+                            <div class="sensor-icon">
+                                <i class="bi bi-droplet-half"></i>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">Норма: 20-85%</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card sensor-card" id="card-water">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Уровень Воды</h6>
+                                <h2 class="mb-0" id="water-value">--</h2>
+                                <small class="text-muted">%</small>
+                            </div>
+                            <div class="sensor-icon">
+                                <i class="bi bi-water"></i>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">Критично: &lt;5%</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card sensor-card" id="card-wind">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Скорость Ветра</h6>
+                                <h2 class="mb-0" id="wind-value">--</h2>
+                                <small class="text-muted">м/с</small>
+                            </div>
+                            <div class="sensor-icon">
+                                <i class="bi bi-wind"></i>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">Макс: 11 м/с</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Дополнительная информация -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> Дополнительные Показания</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3 col-sm-6 mb-2">
+                                <strong>Температура улицы:</strong> <span id="outdoor-temp">--</span>°C
+                            </div>
+                            <div class="col-md-3 col-sm-6 mb-2">
+                                <strong>Влажность улицы:</strong> <span id="outdoor-hum">--</span>%
+                            </div>
+                            <div class="col-md-3 col-sm-6 mb-2">
+                                <strong>Температура раствора:</strong> <span id="sol-temp">--</span>°C
+                            </div>
+                            <div class="col-md-3 col-sm-6 mb-2">
+                                <strong>Пиранометр:</strong> <span id="pyrano-value">--</span> Вт/м²
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-md-3 col-sm-6 mb-2">
+                                <strong>Позиция окна:</strong> <span id="window-pos">--</span>%
+                            </div>
+                            <div class="col-md-3 col-sm-6 mb-2">
+                                <strong>Вентилятор:</strong> <span id="fan-state" class="badge bg-secondary">--</span>
+                            </div>
+                            <div class="col-md-3 col-sm-6 mb-2">
+                                <strong>Обогрев:</strong> <span id="heat-state" class="badge bg-secondary">--</span>
+                            </div>
+                            <div class="col-md-3 col-sm-6 mb-2">
+                                <strong>Насос:</strong> <span id="pump-state" class="badge bg-secondary">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Графики -->
+        <div class="row mb-4">
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> Температура (24 часа)</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chart-temperature"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> Влажность (24 часа)</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chart-humidity"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> Уровень Воды (24 часа)</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chart-water"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> Скорость Ветра (24 часа)</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="chart-wind"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Обновлено -->
+        <div class="row">
+            <div class="col-md-12 text-center text-muted">
+                <small>Последнее обновление: <span id="last-update">--</span></small>
+                <br>
+                <small>Автообновление каждые 30 секунд</small>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
