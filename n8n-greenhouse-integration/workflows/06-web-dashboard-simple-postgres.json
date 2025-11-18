@@ -1,0 +1,132 @@
+{
+  "name": "06 - Web Dashboard Simple (PostgreSQL)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "dashboard",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ugagro_readings\nWHERE timestamp > EXTRACT(EPOCH FROM NOW() - INTERVAL '24 hours')\nORDER BY timestamp ASC;",
+        "options": {}
+      },
+      "id": "get-readings",
+      "name": "Получить Данные",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const readings = $input.all().map(i => i.json);\nconst latest = readings.length > 0 ? readings[readings.length - 1] : { temperature: 0, humidity: 0, water_level: 0, wind_speed: 0 };\nconst chartData = { labels: readings.map(r => r.timestamp_iso), temperature: readings.map(r => parseFloat(r.temperature)), humidity: readings.map(r => parseFloat(r.humidity)), water_level: readings.map(r => parseFloat(r.water_level)), wind_speed: readings.map(r => parseFloat(r.wind_speed)) };\nreturn { latest, chartData, count: readings.length };"
+      },
+      "id": "prepare-data",
+      "name": "Подготовить Данные",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d=$input.item(0).json,l=d.latest,c=d.chartData,s=(t,v)=>{const th={temperature:{min:10,max:40},humidity:{min:20,max:85},water_level:{min:5},wind_speed:{max:11}};if(t==='temperature'&&(v<th.temperature.min||v>th.temperature.max))return'critical';if(t==='humidity'&&(v<th.humidity.min||v>th.humidity.max))return'critical';if(t==='water_level'){if(v<th.water_level.min)return'critical';if(v<15)return'warning';}if(t==='wind_speed'){if(v>th.wind_speed.max)return'critical';if(v>8)return'warning';}return'normal';},html=`<!DOCTYPE html><html lang=\"ru\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"><title>UgAgro 95</title><link href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css\" rel=\"stylesheet\"><script src=\"https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js\"></script><style>body{background:#f5f7fa}.sensor-card{border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.1)}.sensor-card.normal{border-left:4px solid #28a745}.sensor-card.warning{border-left:4px solid #ffc107}.sensor-card.critical{border-left:4px solid #dc3545}</style></head><body><nav class=\"navbar navbar-dark bg-success\"><div class=\"container-fluid\"><span class=\"navbar-brand\">🌱 UgAgro 95</span><span class=\"badge bg-light text-dark\">⚫ Онлайн</span></div></nav><div class=\"container-fluid py-4\"><div class=\"row mb-4\"><div class=\"col-md-3\"><div class=\"card sensor-card ${s('temperature',l.temperature)}\"><div class=\"card-body\"><h6 class=\"text-muted\">Температура</h6><h2>${l.temperature.toFixed(1)}°C</h2></div></div></div><div class=\"col-md-3\"><div class=\"card sensor-card ${s('humidity',l.humidity)}\"><div class=\"card-body\"><h6 class=\"text-muted\">Влажность</h6><h2>${l.humidity.toFixed(1)}%</h2></div></div></div><div class=\"col-md-3\"><div class=\"card sensor-card ${s('water_level',l.water_level)}\"><div class=\"card-body\"><h6 class=\"text-muted\">Уровень Воды</h6><h2>${l.water_level.toFixed(1)}%</h2></div></div></div><div class=\"col-md-3\"><div class=\"card sensor-card ${s('wind_speed',l.wind_speed)}\"><div class=\"card-body\"><h6 class=\"text-muted\">Ветер</h6><h2>${l.wind_speed.toFixed(1)} м/с</h2></div></div></div></div><div class=\"row\"><div class=\"col-md-6\"><div class=\"card\"><div class=\"card-body\"><canvas id=\"c1\"></canvas></div></div></div><div class=\"col-md-6\"><div class=\"card\"><div class=\"card-body\"><canvas id=\"c2\"></canvas></div></div></div></div><div class=\"row mt-3 text-center\"><div class=\"col\"><small>Записей: ${d.count}</small><br><button class=\"btn btn-sm btn-success mt-2\" onclick=\"location.reload()\">🔄 Обновить</button></div></div></div><script>const cd=${JSON.stringify(c)},lb=cd.labels.map(l=>new Date(l).toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'})),o={responsive:true,plugins:{legend:{display:true}}};new Chart(document.getElementById('c1'),{type:'line',data:{labels:lb,datasets:[{label:'Температура',data:cd.temperature,borderColor:'#dc3545'},{label:'Влажность',data:cd.humidity,borderColor:'#17a2b8'}]},options:o});new Chart(document.getElementById('c2'),{type:'line',data:{labels:lb,datasets:[{label:'Вода',data:cd.water_level,borderColor:'#007bff'},{label:'Ветер',data:cd.wind_speed,borderColor:'#28a745'}]},options:o});</script></body></html>`;return{html};"
+      },
+      "id": "generate-html",
+      "name": "Генерация HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Получить Данные",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Получить Данные": {
+      "main": [
+        [
+          {
+            "node": "Подготовить Данные",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подготовить Данные": {
+      "main": [
+        [
+          {
+            "node": "Генерация HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Генерация HTML": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-18T00:00:00.000Z",
+  "versionId": "3"
+}
