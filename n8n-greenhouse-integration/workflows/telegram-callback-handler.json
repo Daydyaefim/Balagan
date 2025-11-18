@@ -54,7 +54,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE telegram_alert_states\nSET \n  acknowledged_at = NOW(),\n  is_active = false,\n  updated_at = NOW()\nWHERE alert_type = '{{ $json.alert_type }}';\n\nSELECT alert_type, acknowledged_at FROM telegram_alert_states WHERE alert_type = '{{ $json.alert_type }}';\n",
+        "query": "={{ \n  const alertType = $json.alert_type || 'unknown';\n  return `UPDATE telegram_alert_states\nSET \n  acknowledged_at = NOW(),\n  is_active = false,\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';\n\nSELECT alert_type, acknowledged_at FROM telegram_alert_states WHERE alert_type = '${alertType}';`;\n}}",
         "options": {}
       },
       "id": "acknowledge-alert",
@@ -72,7 +72,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE telegram_alert_states\nSET \n  mute_until = NOW() + INTERVAL '{{ $json.mute_duration }} hours',\n  is_active = false,\n  updated_at = NOW()\nWHERE alert_type = '{{ $json.alert_type }}';\n\nSELECT alert_type, mute_until FROM telegram_alert_states WHERE alert_type = '{{ $json.alert_type }}';\n",
+        "query": "={{ \n  const alertType = $json.alert_type || 'unknown';\n  const muteDuration = $json.mute_duration || 1;\n  return `UPDATE telegram_alert_states\nSET \n  mute_until = NOW() + INTERVAL '${muteDuration} hours',\n  is_active = false,\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';\n\nSELECT alert_type, mute_until FROM telegram_alert_states WHERE alert_type = '${alertType}';`;\n}}",
         "options": {}
       },
       "id": "mute-alert",

@@ -142,7 +142,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE telegram_alert_states\nSET \n  is_active = true,\n  last_sent_at = NOW(),\n  current_value = {{ $json.current_value }},\n  alert_count = alert_count + 1,\n  updated_at = NOW()\nWHERE alert_type = '{{ $json.alert_type }}';\n\n-- Добавить в историю если новое\nINSERT INTO ugagro_alerts_history (\n  alert_type,\n  alert_message,\n  sensor_value,\n  severity,\n  created_at\n) VALUES (\n  '{{ $json.alert_type }}',\n  '{{ $json.message }}',\n  {{ $json.current_value }},\n  'critical',\n  NOW()\n);",
+        "query": "={{ \n  const alertType = $json.alert_type || 'unknown';\n  const currentValue = $json.current_value || 0;\n  const message = ($json.message || '').replace(/'/g, \"''\");\n  \n  return `UPDATE telegram_alert_states\nSET \n  is_active = true,\n  last_sent_at = NOW(),\n  current_value = ${currentValue},\n  alert_count = alert_count + 1,\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';\n\n-- Добавить в историю если новое\nINSERT INTO ugagro_alerts_history (\n  alert_type,\n  alert_message,\n  sensor_value,\n  severity,\n  created_at\n) VALUES (\n  '${alertType}',\n  '${message}',\n  ${currentValue},\n  'critical',\n  NOW()\n);`;\n}}",
         "options": {}
       },
       "id": "update-state",
@@ -160,7 +160,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE telegram_alert_states\nSET \n  is_active = false,\n  acknowledged_at = NOW(),\n  updated_at = NOW()\nWHERE alert_type = '{{ $json.alert_type }}';",
+        "query": "={{ \n  const alertType = $json.alert_type || 'unknown';\n  return `UPDATE telegram_alert_states\nSET \n  is_active = false,\n  acknowledged_at = NOW(),\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';`;\n}}",
         "options": {}
       },
       "id": "deactivate-alert",
