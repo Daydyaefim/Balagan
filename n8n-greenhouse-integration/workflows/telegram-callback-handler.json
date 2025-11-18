@@ -109,7 +109,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst callback = $node[\"Парсинг Callback\"].json;\n\nlet message;\n\nif (callback.action === 'ack') {\n  message = `✅ *Оповещение подтверждено*\\n\\nТип: ${callback.alert_type}\\nПользователь: ${callback.user_name}\\nВремя: ${new Date().toLocaleString('ru-RU')}`;\n} else {\n  const muteUntil = new Date(data.mute_until).toLocaleString('ru-RU');\n  message = `🔕 *Оповещение отключено*\\n\\nТип: ${callback.alert_type}\\nОтключено на: ${callback.mute_duration} ч.\\nДо: ${muteUntil}\\nПользователь: ${callback.user_name}`;\n}\n\nreturn [{\n  json: {\n    chat_id: callback.chat_id,\n    message_id: callback.message_id,\n    message: message\n  }\n}];"
+        "jsCode": "const data = $input.first().json;\nconst callback = $node[\"Парсинг Callback\"].json;\n\nlet message;\n\nif (callback.action === 'ack') {\n  message = `✅ *Оповещение подтверждено*\\n\\nТип: ${callback.alert_type}\\nПользователь: ${callback.user_name}\\nВремя: ${new Date().toLocaleString('ru-RU')}`;\n} else {\n  const muteUntil = new Date(data.mute_until).toLocaleString('ru-RU');\n  message = `🔕 *Оповещение отключено*\\n\\nТип: ${callback.alert_type}\\nОтключено на: ${callback.mute_duration} ч.\\nДо: ${muteUntil}\\nПользователь: ${callback.user_name}`;\n}\n\nconst callbackQueryId = $node[\"Telegram Trigger\"].json.callback_query.id;\n\nreturn [{\n  json: {\n    chat_id: callback.chat_id,\n    message_id: callback.message_id,\n    message: message,\n    callback_query_id: callbackQueryId\n  }\n}];"
       },
       "id": "format-response",
       "name": "Форматировать Ответ",
@@ -119,46 +119,35 @@
     },
     {
       "parameters": {
-        "resource": "callback",
-        "operation": "answerQuery",
-        "queryId": "={{ $node[\"Telegram Trigger\"].json.callback_query.id }}",
-        "additionalFields": {
-          "text": "Обработано ✓"
-        }
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot<ВАШ_ТОКЕН>/answerCallbackQuery",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ callback_query_id: $json.callback_query_id, text: 'Обработано ✓' }) }}",
+        "options": {}
       },
       "id": "answer-callback",
       "name": "Ответить на Callback",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [1560, 300],
-      "credentials": {
-        "telegramApi": {
-          "id": "telegram_bot",
-          "name": "UgAgro Telegram Bot"
-        }
-      }
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300]
     },
     {
       "parameters": {
-        "chatId": "={{ $json.chat_id }}",
-        "messageType": "editMessageText",
-        "messageId": "={{ $json.message_id }}",
-        "text": "={{ $json.message }}",
-        "additionalFields": {
-          "parseMode": "Markdown"
-        }
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot<ВАШ_ТОКЕН>/editMessageText",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $json.chat_id, message_id: $json.message_id, text: $json.message, parse_mode: 'Markdown' }) }}",
+        "options": {}
       },
       "id": "edit-message",
       "name": "Изменить Сообщение",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [1780, 300],
-      "credentials": {
-        "telegramApi": {
-          "id": "telegram_bot",
-          "name": "UgAgro Telegram Bot"
-        }
-      }
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 300]
     }
   ],
   "connections": {
