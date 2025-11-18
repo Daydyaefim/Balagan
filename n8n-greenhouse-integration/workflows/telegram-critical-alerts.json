@@ -98,34 +98,30 @@
     },
     {
       "parameters": {
-        "chatId": "=УКАЖИТЕ_ВАШ_TELEGRAM_CHAT_ID",
-        "text": "={{ $json.message }}",
-        "additionalFields": {
-          "parseMode": "Markdown",
-          "replyMarkup": "inlineKeyboard",
-          "inlineKeyboard": {
-            "rows": [
-              {
-                "buttons": [
-                  {
-                    "text": "✅ Подтвердить",
-                    "callbackData": "={{ 'ack_' + $json.alert_type }}"
-                  },
-                  {
-                    "text": "🔕 Отключить на 1ч",
-                    "callbackData": "={{ 'mute_' + $json.alert_type + '_1h' }}"
-                  }
-                ]
-              }
-            ]
-          }
-        }
+        "jsCode": "// Подготовка данных для отправки в Telegram\nconst chatId = 'УКАЖИТЕ_ВАШ_TELEGRAM_CHAT_ID';\nconst text = $json.message;\nconst alertType = $json.alert_type;\n\n// Формируем тело запроса для Telegram API\nconst requestBody = {\n  chat_id: chatId,\n  text: text,\n  parse_mode: 'Markdown',\n  reply_markup: {\n    inline_keyboard: [\n      [\n        {\n          text: '✅ Подтвердить',\n          callback_data: `ack_${alertType}`\n        },\n        {\n          text: '🔕 Отключить на 1ч',\n          callback_data: `mute_${alertType}_1h`\n        }\n      ]\n    ]\n  }\n};\n\nreturn [{ json: requestBody }];"
+      },
+      "id": "prepare-telegram-request",
+      "name": "Подготовить Telegram Запрос",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{{ $credentials.accessToken }}/sendMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "telegramApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
       },
       "id": "send-alert",
       "name": "Отправить Оповещение",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [1560, 200],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 200],
       "credentials": {
         "telegramApi": {
           "id": "telegram_bot",
@@ -254,6 +250,17 @@
       ]
     },
     "Форматировать Оповещение": {
+      "main": [
+        [
+          {
+            "node": "Подготовить Telegram Запрос",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подготовить Telegram Запрос": {
       "main": [
         [
           {
