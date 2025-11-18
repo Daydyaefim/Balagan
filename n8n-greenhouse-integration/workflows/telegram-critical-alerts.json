@@ -106,22 +106,16 @@
           "inlineKeyboard": {
             "rows": [
               {
-                "row": {
-                  "buttons": [
-                    {
-                      "button": {
-                        "text": "✅ Подтвердить",
-                        "callbackData": "={{ 'ack_' + $json.alert_type }}"
-                      }
-                    },
-                    {
-                      "button": {
-                        "text": "🔕 Отключить на 1ч",
-                        "callbackData": "={{ 'mute_' + $json.alert_type + '_1h' }}"
-                      }
-                    }
-                  ]
-                }
+                "buttons": [
+                  {
+                    "text": "✅ Подтвердить",
+                    "callbackData": "={{ 'ack_' + $json.alert_type }}"
+                  },
+                  {
+                    "text": "🔕 Отключить на 1ч",
+                    "callbackData": "={{ 'mute_' + $json.alert_type + '_1h' }}"
+                  }
+                ]
               }
             ]
           }
@@ -147,7 +141,7 @@
       "name": "Подготовить SQL Обновления",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1780, 200]
+      "position": [2000, 200]
     },
     {
       "parameters": {
@@ -159,7 +153,7 @@
       "name": "Обновить Состояние",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [2000, 200],
+      "position": [2220, 200],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
