@@ -345,11 +345,17 @@ https://your-domain.com/webhook/dashboard
 
 ```bash
 # Через PuTTY SSH
-docker ps  # найти имя контейнера PostgreSQL
+docker ps  # найти имя контейнера PostgreSQL (обычно n8n-postgres-1)
 
-# Выполнить SQL скрипт
-docker exec -i <postgres_container> psql -U root -d n8n < database/init-greenhouse-db.sql
+# Выполнить SQL скрипт (путь на сервере Beget)
+docker exec -i n8n-postgres-1 psql -U root -d n8n < /opt/beget/n8n/init-greenhouse-db.sql
 ```
+
+**Важно:** Файл `init-greenhouse-db.sql` должен быть загружен на сервер в `/opt/beget/n8n/`
+
+**Пути на сервере:**
+- Файл SQL: `/opt/beget/n8n/init-greenhouse-db.sql`
+- Исходный файл в репозитории: `n8n-greenhouse-integration/database/init-greenhouse-db.sql`
 
 Подробная инструкция: [PUTTY_SETUP.md](docs/PUTTY_SETUP.md)
 
