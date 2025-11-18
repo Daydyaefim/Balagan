@@ -22,7 +22,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Парсинг и валидация MQTT данных\nconst item = $input.first();\nconst payload = typeof item.json.payload === 'string' \n  ? JSON.parse(item.json.payload) \n  : item.json.payload;\n\n// Валидация обязательных полей\nconst requiredFields = ['timestamp', 'temperature', 'humidity', 'water_level', 'wind_speed'];\nfor (const field of requiredFields) {\n  if (payload[field] === undefined || payload[field] === null) {\n    throw new Error(`Отсутствует обязательное поле: ${field}`);\n  }\n}\n\n// Добавляем ISO timestamp для удобства\npayload.timestamp_iso = new Date(payload.timestamp * 1000).toISOString();\npayload.received_at = new Date().toISOString();\n\nreturn { json: payload };"
+        "jsCode": "// Парсинг и валидация MQTT данных\nconst item = $input.first();\n\n// Проверка что входные данные существуют\nif (!item || !item.json) {\n  throw new Error('Нет входных данных от MQTT');\n}\n\n// Безопасное извлечение payload\nlet payload;\nif (item.json.payload) {\n  payload = typeof item.json.payload === 'string' \n    ? JSON.parse(item.json.payload) \n    : item.json.payload;\n} else {\n  // Если payload нет, возможно данные пришли напрямую\n  payload = item.json;\n}\n\n// Проверка что payload это объект\nif (!payload || typeof payload !== 'object') {\n  throw new Error('Некорректный формат MQTT данных');\n}\n\n// Валидация обязательных полей\nconst requiredFields = ['timestamp', 'temperature', 'humidity', 'water_level', 'wind_speed'];\nfor (const field of requiredFields) {\n  if (payload[field] === undefined || payload[field] === null) {\n    throw new Error(`Отсутствует обязательное поле: ${field}`);\n  }\n}\n\n// Добавляем ISO timestamp для удобства\npayload.timestamp_iso = new Date(payload.timestamp * 1000).toISOString();\npayload.received_at = new Date().toISOString();\n\nreturn { json: payload };"
       },
       "id": "parse-validate",
       "name": "Парсинг и Валидация",
@@ -45,7 +45,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Добавление нового показания в БД с ротацией 7 дней\nconst newReading = $input.first().json;\n\nlet readings = [];\ntry {\n  const dbData = $node[\"Читать БД\"]?.json?.data;\n  if (dbData) {\n    const parsed = typeof dbData === 'string' ? JSON.parse(dbData) : dbData;\n    // Проверяем что это массив\n    if (Array.isArray(parsed)) {\n      readings = parsed;\n    } else {\n      console.log('БД содержит некорректные данные, создаем новую');\n      readings = [];\n    }\n  }\n} catch (e) {\n  console.log('БД пуста или повреждена, создаем новую:', e.message);\n  readings = [];\n}\n\n// Добавляем новое показание\nreadings.push(newReading);\n\n// Ротация: хранить только последние 7 дней\nconst sevenDaysAgo = Date.now() / 1000 - (7 * 24 * 60 * 60);\nreadings = readings.filter(r => {\n  // Проверяем что объект имеет timestamp\n  if (r && typeof r === 'object' && r.timestamp) {\n    return r.timestamp > sevenDaysAgo;\n  }\n  return false;\n});\n\n// Сортировка по timestamp\nreadings.sort((a, b) => {\n  const aTime = a.timestamp || 0;\n  const bTime = b.timestamp || 0;\n  return aTime - bTime;\n});\n\nreturn { json: { readings } };"
+        "jsCode": "// Добавление нового показания в БД с ротацией 7 дней\nconst newReading = $input.first()?.json;\n\n// Проверка валидности нового показания\nif (!newReading || typeof newReading !== 'object' || !newReading.timestamp) {\n  console.log('Получено невалидное показание, пропускаем');\n  return { json: { readings: [] } };\n}\n\nlet readings = [];\ntry {\n  const dbData = $node[\"Читать БД\"]?.json?.data;\n  if (dbData) {\n    const parsed = typeof dbData === 'string' ? JSON.parse(dbData) : dbData;\n    // Проверяем что это массив\n    if (Array.isArray(parsed)) {\n      readings = parsed;\n    } else {\n      console.log('БД содержит некорректные данные, создаем новую');\n      readings = [];\n    }\n  }\n} catch (e) {\n  console.log('БД пуста или повреждена, создаем новую:', e.message);\n  readings = [];\n}\n\n// Добавляем новое показание\nreadings.push(newReading);\n\n// Ротация: хранить только последние 7 дней\nconst sevenDaysAgo = Date.now() / 1000 - (7 * 24 * 60 * 60);\nreadings = readings.filter(r => {\n  // Проверяем что объект имеет timestamp\n  if (r && typeof r === 'object' && r.timestamp) {\n    return r.timestamp > sevenDaysAgo;\n  }\n  return false;\n});\n\n// Сортировка по timestamp\nreadings.sort((a, b) => {\n  const aTime = a.timestamp || 0;\n  const bTime = b.timestamp || 0;\n  return aTime - bTime;\n});\n\nreturn { json: { readings } };"
       },
       "id": "update-db",
       "name": "Обновить БД",
@@ -144,5 +144,5 @@
   "tags": [],
   "triggerCount": 1,
   "updatedAt": "2025-01-18T00:00:00.000Z",
-  "versionId": "2"
+  "versionId": "3"
 }
