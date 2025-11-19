@@ -7,7 +7,10 @@
       "name": "Запустить Миграцию",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -19,7 +22,10 @@
       "name": "1. Создать watering_settings",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [460, 200],
+      "position": [
+        460,
+        200
+      ],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -37,7 +43,10 @@
       "name": "2. Создать watering_notifications",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [680, 200],
+      "position": [
+        680,
+        200
+      ],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -55,7 +64,10 @@
       "name": "3. Добавить esp32_connection_lost",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [900, 200],
+      "position": [
+        900,
+        200
+      ],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -66,14 +78,38 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Проверка созданных таблиц и данных\nSELECT 'watering_settings' as table_name, COUNT(*) as row_count FROM watering_settings\nUNION ALL\nSELECT 'watering_notifications' as table_name, COUNT(*) as row_count FROM watering_notifications\nUNION ALL\nSELECT 'telegram_alert_states (esp32_connection_lost)' as table_name, COUNT(*) as row_count \nFROM telegram_alert_states WHERE alert_type = 'esp32_connection_lost';",
+        "query": "-- Добавление столбцов для режимов работы оборудования\nALTER TABLE ugagro_readings\n    ADD COLUMN IF NOT EXISTS fan_mode VARCHAR(20) DEFAULT 'auto',\n    ADD COLUMN IF NOT EXISTS heat_mode VARCHAR(20) DEFAULT 'auto',\n    ADD COLUMN IF NOT EXISTS pump_mode VARCHAR(20) DEFAULT 'auto',\n    ADD COLUMN IF NOT EXISTS fog_mode VARCHAR(20) DEFAULT 'auto',\n    ADD COLUMN IF NOT EXISTS hydro_mix_mode VARCHAR(20) DEFAULT 'auto';\n\n-- Добавляем столбец для солнечной радиации (алиас для pyrano)\nALTER TABLE ugagro_readings\n    ADD COLUMN IF NOT EXISTS solar_radiation DECIMAL(5,2);\n\n-- Создаем триггер для синхронизации solar_radiation и pyrano\nCREATE OR REPLACE FUNCTION sync_solar_radiation() RETURNS TRIGGER AS $$\nBEGIN\n    IF NEW.pyrano IS NOT NULL THEN\n        NEW.solar_radiation := NEW.pyrano;\n    END IF;\n    IF NEW.solar_radiation IS NOT NULL THEN\n        NEW.pyrano := NEW.solar_radiation;\n    END IF;\n    RETURN NEW;\nEND;\n$$ LANGUAGE plpgsql;\n\nDROP TRIGGER IF EXISTS trigger_sync_solar_radiation ON ugagro_readings;\nCREATE TRIGGER trigger_sync_solar_radiation\n    BEFORE INSERT OR UPDATE ON ugagro_readings\n    FOR EACH ROW\n    EXECUTE FUNCTION sync_solar_radiation();\n\n-- Обновляем существующие записи\nUPDATE ugagro_readings SET solar_radiation = pyrano WHERE solar_radiation IS NULL;\n\nSELECT 'equipment_modes_migration_completed' as result;",
+        "options": {}
+      },
+      "id": "add-equipment-modes",
+      "name": "4. Добавить режимы оборудования",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Проверка созданных таблиц и данных\nSELECT 'watering_settings' as table_name, COUNT(*) as row_count FROM watering_settings\nUNION ALL\nSELECT 'watering_notifications' as table_name, COUNT(*) as row_count FROM watering_notifications\nUNION ALL\nSELECT 'telegram_alert_states (esp32_connection_lost)' as table_name, COUNT(*) as row_count\nFROM telegram_alert_states WHERE alert_type = 'esp32_connection_lost'\nUNION ALL\nSELECT 'ugagro_readings (equipment modes)' as table_name,\n       COUNT(*) FILTER (WHERE fan_mode IS NOT NULL) as row_count\nFROM ugagro_readings\nUNION ALL\nSELECT 'ugagro_readings (solar_radiation)' as table_name,\n       COUNT(*) FILTER (WHERE solar_radiation IS NOT NULL) as row_count\nFROM ugagro_readings;",
         "options": {}
       },
       "id": "verify-migrations",
-      "name": "4. Проверить Результаты",
+      "name": "5. Проверить Результаты",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1120, 200],
+      "position": [
+        1120,
+        300
+      ],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -89,7 +125,10 @@
       "name": "Форматировать Результаты",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1340, 200]
+      "position": [
+        1340,
+        300
+      ]
     }
   ],
   "connections": {
@@ -130,14 +169,25 @@
       "main": [
         [
           {
-            "node": "4. Проверить Результаты",
+            "node": "4. Добавить режимы оборудования",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "4. Проверить Результаты": {
+    "4. Добавить режимы оборудования": {
+      "main": [
+        [
+          {
+            "node": "5. Проверить Результаты",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Проверить Результаты": {
       "main": [
         [
           {
