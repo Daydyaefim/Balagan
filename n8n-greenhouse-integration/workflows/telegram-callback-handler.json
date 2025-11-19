@@ -146,18 +146,8 @@
         "method": "POST",
         "url": "https://api.telegram.org/bot<ВАШ_ТОКЕН>/answerCallbackQuery",
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "callback_query_id",
-              "value": "={{ $json.callback_query_id }}"
-            },
-            {
-              "name": "text",
-              "value": "Обработано ✓"
-            }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  callback_query_id: $json.callback_query_id,\n  text: 'Обработано ✓'\n}) }}",
         "options": {}
       },
       "id": "answer-callback",
@@ -174,26 +164,8 @@
         "method": "POST",
         "url": "https://api.telegram.org/bot<ВАШ_ТОКЕН>/editMessageText",
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "chat_id",
-              "value": "={{ $json.chat_id }}"
-            },
-            {
-              "name": "message_id",
-              "value": "={{ $json.message_id }}"
-            },
-            {
-              "name": "text",
-              "value": "={{ $json.message }}"
-            },
-            {
-              "name": "parse_mode",
-              "value": "Markdown"
-            }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  chat_id: $json.chat_id,\n  message_id: $json.message_id,\n  text: $json.message,\n  parse_mode: 'Markdown'\n}) }}",
         "options": {}
       },
       "id": "edit-message",
