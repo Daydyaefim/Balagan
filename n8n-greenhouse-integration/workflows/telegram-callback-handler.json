@@ -11,7 +11,10 @@
       "name": "Telegram Trigger",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "credentials": {
         "telegramApi": {
           "id": "telegram_bot",
@@ -27,7 +30,10 @@
       "name": "Парсинг Callback",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -49,7 +55,10 @@
       "name": "Проверка Действия",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -59,7 +68,10 @@
       "name": "Подготовить SQL Подтверждения",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 200]
+      "position": [
+        900,
+        200
+      ]
     },
     {
       "parameters": {
@@ -71,7 +83,10 @@
       "name": "Подтвердить Оповещение",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1120, 200],
+      "position": [
+        1120,
+        200
+      ],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -87,7 +102,10 @@
       "name": "Подготовить SQL Отключения",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 400]
+      "position": [
+        900,
+        400
+      ]
     },
     {
       "parameters": {
@@ -99,7 +117,10 @@
       "name": "Отключить Оповещение",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1120, 400],
+      "position": [
+        1120,
+        400
+      ],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -115,7 +136,10 @@
       "name": "Форматировать Ответ",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1340, 300]
+      "position": [
+        1340,
+        300
+      ]
     },
     {
       "parameters": {
@@ -124,14 +148,17 @@
         "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ callback_query_id: $json.callback_query_id, text: 'Обработано ✓' }) }}",
+        "jsonBody": "={{ { callback_query_id: $json.callback_query_id, text: 'Обработано ✓' } }}",
         "options": {}
       },
       "id": "answer-callback",
       "name": "Ответить на Callback",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1560, 300]
+      "position": [
+        1560,
+        300
+      ]
     },
     {
       "parameters": {
@@ -140,14 +167,17 @@
         "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $json.chat_id, message_id: $json.message_id, text: $json.message, parse_mode: 'Markdown' }) }}",
+        "jsonBody": "={{ { chat_id: $json.chat_id, message_id: $json.message_id, text: $json.message, parse_mode: 'Markdown' } }}",
         "options": {}
       },
       "id": "edit-message",
       "name": "Изменить Сообщение",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1780, 300]
+      "position": [
+        1780,
+        300
+      ]
     }
   ],
   "connections": {
