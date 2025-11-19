@@ -188,27 +188,6 @@
           "name": "UgAgro Telegram Bot"
         }
       }
-    },
-    {
-      "parameters": {
-        "chatId": "={{ $json.message.chat.id }}",
-        "text": "❓ Неизвестная команда.\\n\\nДоступные команды:\\n/status - Показать статус теплицы\\n/poliv - Информация о поливе",
-        "additionalFields": {}
-      },
-      "id": "send-unknown",
-      "name": "Неизвестная Команда",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        48,
-        800
-      ],
-      "credentials": {
-        "telegramApi": {
-          "id": "telegram_bot",
-          "name": "UgAgro Telegram Bot"
-        }
-      }
     }
   ],
   "connections": {
@@ -233,13 +212,6 @@
         [
           {
             "node": "Получить Данные (Статус)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Неизвестная Команда",
             "type": "main",
             "index": 0
           }
