@@ -5,15 +5,16 @@
       "parameters": {
         "updates": [
           "message"
-        ]
+        ],
+        "additionalFields": {}
       },
       "id": "telegram-trigger",
       "name": "Telegram Trigger",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.1,
       "position": [
-        240,
-        400
+        -400,
+        608
       ],
       "webhookId": "telegram-ugagro-bot",
       "credentials": {
@@ -25,80 +26,76 @@
     },
     {
       "parameters": {
-        "mode": "rules",
-        "rules": {
-          "rules": [
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
             {
-              "conditions": {
-                "options": {
-                  "caseSensitive": false
-                },
-                "conditions": [
-                  {
-                    "id": "status-1",
-                    "leftValue": "={{ $json.message.text }}",
-                    "rightValue": "/status",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  },
-                  {
-                    "id": "status-2",
-                    "leftValue": "={{ $json.message.text }}",
-                    "rightValue": "/статус",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "or"
-              },
-              "renameOutput": true,
-              "outputKey": "status"
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/status",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
             },
             {
-              "conditions": {
-                "options": {
-                  "caseSensitive": false
-                },
-                "conditions": [
-                  {
-                    "id": "poliv-1",
-                    "leftValue": "={{ $json.message.text }}",
-                    "rightValue": "/poliv",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  },
-                  {
-                    "id": "poliv-2",
-                    "leftValue": "={{ $json.message.text }}",
-                    "rightValue": "/полив",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "or"
-              },
-              "renameOutput": true,
-              "outputKey": "poliv"
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/статус",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
             }
-          ]
+          ],
+          "combinator": "or"
         },
         "options": {}
       },
-      "id": "route-command",
-      "name": "Маршрутизация Команд",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3,
+      "id": "check-status",
+      "name": "Проверка /status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
       "position": [
-        460,
-        400
+        -160,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/poliv",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/полив",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "check-poliv",
+      "name": "Проверка /poliv",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        704
       ]
     },
     {
@@ -112,8 +109,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        680,
-        300
+        48,
+        400
       ],
       "credentials": {
         "postgres": {
@@ -131,8 +128,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        900,
-        200
+        272,
+        400
       ]
     },
     {
@@ -146,8 +143,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        680,
-        500
+        48,
+        608
       ],
       "credentials": {
         "postgres": {
@@ -165,8 +162,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        900,
-        400
+        272,
+        608
       ]
     },
     {
@@ -182,8 +179,8 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1120,
-        300
+        496,
+        512
       ],
       "credentials": {
         "telegramApi": {
@@ -203,8 +200,8 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        680,
-        600
+        48,
+        800
       ],
       "credentials": {
         "telegramApi": {
@@ -219,14 +216,19 @@
       "main": [
         [
           {
-            "node": "Маршрутизация Команд",
+            "node": "Проверка /status",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Проверка /poliv",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Маршрутизация Команд": {
+    "Проверка /status": {
       "main": [
         [
           {
@@ -237,14 +239,18 @@
         ],
         [
           {
-            "node": "Получить Данные (Полив)",
+            "node": "Неизвестная Команда",
             "type": "main",
             "index": 0
           }
-        ],
+        ]
+      ]
+    },
+    "Проверка /poliv": {
+      "main": [
         [
           {
-            "node": "Неизвестная Команда",
+            "node": "Получить Данные (Полив)",
             "type": "main",
             "index": 0
           }
@@ -304,5 +310,5 @@
   "tags": [],
   "triggerCount": 0,
   "updatedAt": "2025-01-19T00:00:00.000Z",
-  "versionId": "5"
+  "versionId": "6"
 }
