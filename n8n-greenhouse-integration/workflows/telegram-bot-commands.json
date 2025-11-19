@@ -20,74 +20,51 @@
     },
     {
       "parameters": {
-        "mode": "rules",
-        "rules": {
-          "rules": [
+        "conditions": {
+          "string": [
             {
-              "conditions": {
-                "options": {
-                  "caseSensitive": false
-                },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.message.text }}",
-                    "rightValue": "/status",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  },
-                  {
-                    "leftValue": "={{ $json.message.text }}",
-                    "rightValue": "/статус",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "or"
-              },
-              "renameOutput": true,
-              "outputKey": "status"
+              "value1": "={{ $json.message.text }}",
+              "operation": "equal",
+              "value2": "/status"
             },
             {
-              "conditions": {
-                "options": {
-                  "caseSensitive": false
-                },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.message.text }}",
-                    "rightValue": "/poliv",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  },
-                  {
-                    "leftValue": "={{ $json.message.text }}",
-                    "rightValue": "/полив",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "or"
-              },
-              "renameOutput": true,
-              "outputKey": "poliv"
+              "value1": "={{ $json.message.text }}",
+              "operation": "equal",
+              "value2": "/статус"
             }
           ]
         },
-        "options": {}
+        "combineOperation": "any"
       },
-      "id": "route-command",
-      "name": "Маршрутизация Команд",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3,
+      "id": "check-status",
+      "name": "Проверка /status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
       "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.message.text }}",
+              "operation": "equal",
+              "value2": "/poliv"
+            },
+            {
+              "value1": "={{ $json.message.text }}",
+              "operation": "equal",
+              "value2": "/полив"
+            }
+          ]
+        },
+        "combineOperation": "any"
+      },
+      "id": "check-poliv",
+      "name": "Проверка /poliv",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 600]
     },
     {
       "parameters": {
@@ -99,7 +76,7 @@
       "name": "Получить Данные (Статус)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [680, 300],
+      "position": [680, 200],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -115,7 +92,7 @@
       "name": "Форматировать Статус",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [900, 200]
     },
     {
       "parameters": {
@@ -127,7 +104,7 @@
       "name": "Получить Данные (Полив)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [680, 500],
+      "position": [900, 500],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -143,7 +120,7 @@
       "name": "Форматировать Полив",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 500]
+      "position": [1120, 500]
     },
     {
       "parameters": {
@@ -157,7 +134,7 @@
       "name": "Отправить в Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1120, 400],
+      "position": [1340, 350],
       "credentials": {
         "telegramApi": {
           "id": "telegram_bot",
@@ -175,7 +152,7 @@
       "name": "Неизвестная Команда",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [680, 700],
+      "position": [900, 800],
       "credentials": {
         "telegramApi": {
           "id": "telegram_bot",
@@ -189,14 +166,14 @@
       "main": [
         [
           {
-            "node": "Маршрутизация Команд",
+            "node": "Проверка /status",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Маршрутизация Команд": {
+    "Проверка /status": {
       "main": [
         [
           {
@@ -205,6 +182,17 @@
             "index": 0
           }
         ],
+        [
+          {
+            "node": "Проверка /poliv",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Проверка /poliv": {
+      "main": [
         [
           {
             "node": "Получить Данные (Полив)",
@@ -274,5 +262,5 @@
   "tags": [],
   "triggerCount": 0,
   "updatedAt": "2025-01-19T00:00:00.000Z",
-  "versionId": "3"
+  "versionId": "4"
 }
