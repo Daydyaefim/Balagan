@@ -130,24 +130,11 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst callback = $node[\"Парсинг Callback\"].json;\n\nlet message;\n\nif (callback.action === 'ack') {\n  message = `✅ *Оповещение подтверждено*\\n\\nТип: ${callback.alert_type}\\nПользователь: ${callback.user_name}\\nВремя: ${new Date().toLocaleString('ru-RU')}`;\n} else {\n  const muteUntil = new Date(data.mute_until).toLocaleString('ru-RU');\n  message = `🔕 *Оповещение отключено*\\n\\nТип: ${callback.alert_type}\\nОтключено на: ${callback.mute_duration} ч.\\nДо: ${muteUntil}\\nПользователь: ${callback.user_name}`;\n}\n\nconst callbackQueryId = $node[\"Telegram Trigger\"].json.callback_query.id;\n\nreturn [{\n  json: {\n    chat_id: callback.chat_id,\n    message_id: callback.message_id,\n    message: message,\n    callback_query_id: callbackQueryId\n  }\n}];"
-      },
-      "id": "format-response",
-      "name": "Форматировать Ответ",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1340,
-        300
-      ]
-    },
-    {
-      "parameters": {
         "method": "POST",
         "url": "https://api.telegram.org/bot<ВАШ_ТОКЕН>/answerCallbackQuery",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"callback_query_id\": \"{{ $json.callback_query_id }}\",\n  \"text\": \"Обработано ✓\"\n}",
+        "jsonBody": "={\n  \"callback_query_id\": \"{{ $node[\"Telegram Trigger\"].json.callback_query.id }}\",\n  \"text\": \"Обработано ✓\"\n}",
         "options": {}
       },
       "id": "answer-callback",
@@ -155,25 +142,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1560,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.telegram.org/bot<ВАШ_ТОКЕН>/editMessageText",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"chat_id\": {{ $json.chat_id }},\n  \"message_id\": {{ $json.message_id }},\n  \"text\": \"{{ $json.message }}\",\n  \"parse_mode\": \"Markdown\"\n}",
-        "options": {}
-      },
-      "id": "edit-message",
-      "name": "Изменить Сообщение",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1780,
+        1340,
         300
       ]
     }
@@ -245,7 +214,7 @@
       "main": [
         [
           {
-            "node": "Форматировать Ответ",
+            "node": "Ответить на Callback",
             "type": "main",
             "index": 0
           }
@@ -256,29 +225,7 @@
       "main": [
         [
           {
-            "node": "Форматировать Ответ",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Форматировать Ответ": {
-      "main": [
-        [
-          {
             "node": "Ответить на Callback",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Ответить на Callback": {
-      "main": [
-        [
-          {
-            "node": "Изменить Сообщение",
             "type": "main",
             "index": 0
           }
