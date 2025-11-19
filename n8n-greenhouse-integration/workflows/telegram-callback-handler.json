@@ -143,19 +143,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=https://api.telegram.org/bot<ВАШ_ТОКЕН>/answerCallbackQuery",
-        "authentication": "none",
-        "sendBody": true,
-        "specifyBody": "string",
-        "bodyContentType": "json",
-        "body": "={{ JSON.stringify({ callback_query_id: $json.callback_query_id, text: 'Обработано ✓' }) }}",
-        "options": {}
+        "jsCode": "// Отвечаем на callback query\nconst data = $input.first().json;\n\nconst response = await fetch('https://api.telegram.org/bot<ВАШ_ТОКЕН>/answerCallbackQuery', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify({\n    callback_query_id: data.callback_query_id,\n    text: 'Обработано ✓'\n  })\n});\n\nconst result = await response.json();\nconsole.log('Answer callback result:', result);\n\nreturn $input.all();"
       },
       "id": "answer-callback",
       "name": "Ответить на Callback",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         1560,
         300
@@ -163,19 +156,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=https://api.telegram.org/bot<ВАШ_ТОКЕН>/editMessageText",
-        "authentication": "none",
-        "sendBody": true,
-        "specifyBody": "string",
-        "bodyContentType": "json",
-        "body": "={{ JSON.stringify({ chat_id: $json.chat_id, message_id: $json.message_id, text: $json.message, parse_mode: 'Markdown' }) }}",
-        "options": {}
+        "jsCode": "// Редактируем сообщение в Telegram\nconst data = $input.first().json;\n\nconst response = await fetch('https://api.telegram.org/bot<ВАШ_ТОКЕН>/editMessageText', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify({\n    chat_id: data.chat_id,\n    message_id: data.message_id,\n    text: data.message,\n    parse_mode: 'Markdown'\n  })\n});\n\nconst result = await response.json();\nconsole.log('Edit message result:', result);\n\nif (!result.ok) {\n  throw new Error(`Telegram API error: ${result.description}`);\n}\n\nreturn [{\n  json: {\n    ...data,\n    telegram_response: result\n  }\n}];"
       },
       "id": "edit-message",
       "name": "Изменить Сообщение",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         1780,
         300
