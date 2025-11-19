@@ -9,7 +9,7 @@
       "name": "Telegram Trigger",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.1,
-      "position": [240, 300],
+      "position": [240, 400],
       "webhookId": "telegram-ugagro-bot",
       "credentials": {
         "telegramApi": {
@@ -45,11 +45,44 @@
           "combinator": "or"
         }
       },
-      "id": "check-command",
-      "name": "Проверка Команды",
+      "id": "check-status-command",
+      "name": "Проверка /status",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/poliv",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/полив",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "check-poliv-command",
+      "name": "Проверка /poliv",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 500]
     },
     {
       "parameters": {
@@ -57,8 +90,8 @@
         "query": "SELECT * FROM ugagro_readings\nORDER BY timestamp DESC\nLIMIT 1;",
         "options": {}
       },
-      "id": "get-latest-data",
-      "name": "Получить Последние Данные",
+      "id": "get-latest-data-status",
+      "name": "Получить Данные (Статус)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [680, 200],
@@ -71,13 +104,41 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst chatId = $node[\"Telegram Trigger\"].json.message.chat.id;\n\n// Функция для определения эмодзи статуса\nfunction getStatusEmoji(type, value) {\n  const thresholds = {\n    temperature: { min: 10, max: 40 },\n    humidity: { min: 20, max: 85 },\n    water_level: { min: 5 },\n    wind_speed: { max: 11 }\n  };\n  \n  if (type === 'temperature') {\n    if (value < thresholds.temperature.min || value > thresholds.temperature.max) return '🔴';\n    return '🟢';\n  } else if (type === 'humidity') {\n    if (value < thresholds.humidity.min || value > thresholds.humidity.max) return '🔴';\n    return '🟢';\n  } else if (type === 'water_level') {\n    if (value < thresholds.water_level.min) return '🔴';\n    if (value < 15) return '🟡';\n    return '🟢';\n  } else if (type === 'wind_speed') {\n    if (value > thresholds.wind_speed.max) return '🔴';\n    if (value > 8) return '🟡';\n    return '🟢';\n  }\n  return '⚪';\n}\n\n// Преобразуем все значения в числа\nconst temp = parseFloat(data.temperature) || 0;\nconst hum = parseFloat(data.humidity) || 0;\nconst water = parseFloat(data.water_level) || 0;\nconst wind = parseFloat(data.wind_speed) || 0;\nconst outdoorTemp = parseFloat(data.outdoor_temperature) || null;\nconst outdoorHum = parseFloat(data.outdoor_humidity) || null;\n\n// Формируем сообщение\nconst message = `🌱 *UGAGRO 95 - СТАТУС ТЕПЛИЦЫ*\n\n📊 *ОСНОВНЫЕ ПОКАЗАТЕЛИ:*\n\n${getStatusEmoji('temperature', temp)} *Температура:* ${temp.toFixed(1)}°C\n   └ Норма: 10-40°C\n\n${getStatusEmoji('humidity', hum)} *Влажность:* ${hum.toFixed(1)}%\n   └ Норма: 20-85%\n\n${getStatusEmoji('water_level', water)} *Уровень воды:* ${water.toFixed(1)}%\n   └ Критично: <5%, Внимание: <15%\n\n${getStatusEmoji('wind_speed', wind)} *Скорость ветра:* ${wind.toFixed(1)} м/с\n   └ Критично: >11 м/с, Внимание: >8 м/с\n\n━━━━━━━━━━━━━━━━━━━━━\n\n🌡️ *УЛИЦА:*\n   Температура: ${outdoorTemp ? outdoorTemp.toFixed(1) + '°C' : 'н/д'}\n   Влажность: ${outdoorHum ? outdoorHum.toFixed(1) + '%' : 'н/д'}\n\n⚙️ *ОБОРУДОВАНИЕ:*\n   ${data.fan_state ? '✅' : '❌'} Вентилятор\n   ${data.heat_state ? '✅' : '❌'} Обогрев\n   ${data.pump_state ? '✅' : '❌'} Насос\n   ${data.fog_state ? '✅' : '❌'} Туман\n\n🪟 *Окно:* ${data.window_position || 0}%\n☀️ *Пиранометр:* ${parseFloat(data.pyrano || 0).toFixed(0)} Вт/м²\n\n🕒 *Обновлено:* ${new Date(data.timestamp_iso).toLocaleString('ru-RU')}\n\n━━━━━━━━━━━━━━━━━━━━━\n🟢 - Норма  🟡 - Внимание  🔴 - Критично\n\nℹ️ Используйте /status для обновления`;\n\nreturn [{\n  json: {\n    chatId: chatId,\n    message: message\n  }\n}];"
+        "jsCode": "const data = $input.first().json;\nconst chatId = $node[\"Telegram Trigger\"].json.message.chat.id;\n\n// Преобразуем все значения в числа\nconst temp = parseFloat(data.temperature) || 0;\nconst hum = parseFloat(data.humidity) || 0;\nconst water = parseFloat(data.water_level) || 0;\nconst outdoorTemp = parseFloat(data.outdoor_temperature) || null;\nconst pyrano = parseFloat(data.pyrano) || 0;\nconst windowPos = parseInt(data.window_position) || 0;\n\n// Формируем упрощенное сообщение\nconst message = `🌱 *ПОКАЗАНИЯ UGAGRO 95*\n\n🌡️ *Температура теплицы:* ${temp.toFixed(1)}°C\n💧 *Влажность теплицы:* ${hum.toFixed(1)}%\n🌡️ *Температура улицы:* ${outdoorTemp ? outdoorTemp.toFixed(1) + '°C' : 'н/д'}\n💦 *Уровень раствора:* ${water.toFixed(1)}%\n☀️ *Текущая радиация:* ${pyrano.toFixed(0)} Вт/м²\n🪟 *Положение форточки:* ${windowPos}%\n🕒 *Время ESP32:* ${new Date(data.timestamp_iso).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}\n\n━━━━━━━━━━━━━━━━━━━━━\nℹ️ /poliv - информация о поливе`;\n\nreturn [{\n  json: {\n    chatId: chatId,\n    message: message\n  }\n}];"
       },
       "id": "format-status",
       "name": "Форматировать Статус",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT r.*, w.* FROM ugagro_readings r\nCROSS JOIN watering_settings w\nORDER BY r.timestamp DESC\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "get-latest-data-poliv",
+      "name": "Получить Данные (Полив)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 400],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst chatId = $node[\"Telegram Trigger\"].json.message.chat.id;\n\n// Преобразуем данные\nconst wateringMode = parseInt(data.watering_mode) || 0;\nconst pyrano = parseFloat(data.pyrano) || 0;\nconst radSum = parseFloat(data.rad_sum) || 0;\nconst wateringDuration = parseInt(data.watering_duration_sec) || 60;\nconst radThreshold = parseFloat(data.rad_threshold) || 500;\nconst maxInterval = parseInt(data.max_interval_minutes) || 180;\nconst lastWateringUnix = parseInt(data.last_watering_start_unix) || 0;\nconst cycleCount = parseInt(data.cycle_count) || 0;\nconst forceActive = data.force_watering_active || false;\n\n// Окно поливов\nconst windowStart = data.watering_window_start || '08:00:00';\nconst windowEnd = data.watering_window_end || '20:00:00';\n\n// Названия режимов\nconst modeNames = {\n  0: '⚙️ Ручной (по интервалу)',\n  1: '🌅 Утренний',\n  2: '☀️ По радиации',\n  3: '🔧 Принудительный'\n};\n\nconst modeName = modeNames[wateringMode] || '❓ Неизвестный';\n\n// Расчет времени до следующего полива\nlet nextWateringInfo = '';\nconst now = Math.floor(Date.now() / 1000);\nconst timeSinceLastWatering = lastWateringUnix > 0 ? now - lastWateringUnix : 0;\nconst minutesSinceLast = Math.floor(timeSinceLastWatering / 60);\n\n// Получаем текущее время в часовом поясе Москвы\nconst moscowTime = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', hour12: false });\nconst currentHour = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', hour: 'numeric', hour12: false });\nconst currentMinute = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', minute: 'numeric' });\nconst currentTime = `${currentHour.padStart(2, '0')}:${currentMinute.padStart(2, '0')}`;\n\n// Проверяем, находимся ли мы в окне поливов\nconst isInWindow = currentTime >= windowStart && currentTime <= windowEnd;\n\nif (wateringMode === 0) {\n  // Ручной режим - по интервалу\n  const manualInterval = parseInt(data.manual_interval_minutes) || 60;\n  const minutesUntilNext = manualInterval - minutesSinceLast;\n  \n  if (minutesUntilNext > 0 && minutesUntilNext <= maxInterval) {\n    const hours = Math.floor(minutesUntilNext / 60);\n    const mins = minutesUntilNext % 60;\n    nextWateringInfo = hours > 0 ? `через ${hours}ч ${mins}мин` : `через ${mins}мин`;\n  } else if (minutesUntilNext > maxInterval) {\n    nextWateringInfo = `макс. через ${Math.floor(maxInterval / 60)}ч ${maxInterval % 60}мин`;\n  } else {\n    nextWateringInfo = 'скоро';\n  }\n} else if (wateringMode === 1) {\n  // Утренний режим\n  const morningCount = parseInt(data.morning_count) || 3;\n  nextWateringInfo = cycleCount >= morningCount ? 'завтра утром' : 'по расписанию утром';\n} else if (wateringMode === 2) {\n  // По радиации\n  const radNeeded = radThreshold - radSum;\n  \n  if (radNeeded <= 0) {\n    nextWateringInfo = 'готов к запуску';\n  } else if (pyrano > 0) {\n    // Примерный расчет (очень приблизительный)\n    const minutesNeeded = Math.floor(radNeeded / pyrano * 60);\n    \n    if (minutesNeeded <= maxInterval) {\n      const hours = Math.floor(minutesNeeded / 60);\n      const mins = minutesNeeded % 60;\n      nextWateringInfo = hours > 0 ? `~через ${hours}ч ${mins}мин` : `~через ${mins}мин`;\n    } else {\n      nextWateringInfo = `>макс. интервала (${Math.floor(maxInterval / 60)}ч)`;\n    }\n  } else {\n    nextWateringInfo = 'ожидание солнца';\n  }\n} else if (wateringMode === 3) {\n  // Принудительный\n  nextWateringInfo = forceActive ? 'идет сейчас' : 'по команде';\n}\n\n// Проверяем окно поливов для следующего полива\nif (!isInWindow && wateringMode !== 3) {\n  nextWateringInfo = 'завтра (вне окна поливов)';\n}\n\n// Формируем сообщение\nconst message = `💧 *ИНФОРМАЦИЯ О ПОЛИВЕ*\n\n⚙️ *Режим:* ${modeName}\n☀️ *Текущая радиация:* ${pyrano.toFixed(0)} Вт/м²\n📊 *Накопленная радиация:* ${radSum.toFixed(1)} Вт/м²\n🎯 *Порог радиации:* ${radThreshold.toFixed(0)} Вт/м² (для режима 2)\n⏱️ *Длительность полива:* ${wateringDuration} сек\n🔄 *Циклов полива сегодня:* ${cycleCount}\n\n━━━━━━━━━━━━━━━━━━━━━\n\n⏰ *СЛЕДУЮЩИЙ ПОЛИВ:*\n${nextWateringInfo}\n\n⏳ *Максимальный интервал:* ${Math.floor(maxInterval / 60)}ч ${maxInterval % 60}мин\n🕐 *Окно поливов:* ${windowStart.substring(0, 5)} - ${windowEnd.substring(0, 5)}\n${isInWindow ? '✅ Сейчас в окне поливов' : '⏸️ Вне окна поливов'}\n\n${lastWateringUnix > 0 ? `🕒 *Последний полив:* ${new Date(lastWateringUnix * 1000).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}` : ''}\n\n━━━━━━━━━━━━━━━━━━━━━\nℹ️ /status - показания датчиков`;\n\nreturn [{\n  json: {\n    chatId: chatId,\n    message: message\n  }\n}];"
+      },
+      "id": "format-poliv",
+      "name": "Форматировать Полив",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
     },
     {
       "parameters": {
@@ -91,7 +152,7 @@
       "name": "Отправить в Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1120, 200],
+      "position": [1120, 300],
       "credentials": {
         "telegramApi": {
           "id": "telegram_bot",
@@ -102,14 +163,14 @@
     {
       "parameters": {
         "chatId": "={{ $json.message.chat.id }}",
-        "text": "❓ Неизвестная команда.\\n\\nДоступные команды:\\n/status - Показать статус теплицы\\n/статус - То же самое",
+        "text": "❓ Неизвестная команда.\\n\\nДоступные команды:\\n/status - Показать статус теплицы\\n/poliv - Информация о поливе",
         "additionalFields": {}
       },
       "id": "send-unknown",
       "name": "Неизвестная Команда",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [680, 400],
+      "position": [680, 600],
       "credentials": {
         "telegramApi": {
           "id": "telegram_bot",
@@ -123,18 +184,23 @@
       "main": [
         [
           {
-            "node": "Проверка Команды",
+            "node": "Проверка /status",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Проверка /poliv",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Проверка Команды": {
+    "Проверка /status": {
       "main": [
         [
           {
-            "node": "Получить Последние Данные",
+            "node": "Получить Данные (Статус)",
             "type": "main",
             "index": 0
           }
@@ -148,7 +214,18 @@
         ]
       ]
     },
-    "Получить Последние Данные": {
+    "Проверка /poliv": {
+      "main": [
+        [
+          {
+            "node": "Получить Данные (Полив)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Получить Данные (Статус)": {
       "main": [
         [
           {
@@ -159,7 +236,29 @@
         ]
       ]
     },
+    "Получить Данные (Полив)": {
+      "main": [
+        [
+          {
+            "node": "Форматировать Полив",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Форматировать Статус": {
+      "main": [
+        [
+          {
+            "node": "Отправить в Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Форматировать Полив": {
       "main": [
         [
           {
@@ -178,6 +277,6 @@
   "staticData": null,
   "tags": [],
   "triggerCount": 0,
-  "updatedAt": "2025-01-18T00:00:00.000Z",
-  "versionId": "1"
+  "updatedAt": "2025-01-19T00:00:00.000Z",
+  "versionId": "2"
 }
