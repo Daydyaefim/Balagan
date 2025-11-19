@@ -147,7 +147,7 @@
         "url": "https://api.telegram.org/bot<ВАШ_ТОКЕН>/answerCallbackQuery",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  callback_query_id: $json.callback_query_id,\n  text: 'Обработано ✓'\n}) }}",
+        "jsonBody": "={\n  \"callback_query_id\": \"{{ $json.callback_query_id }}\",\n  \"text\": \"Обработано ✓\"\n}",
         "options": {}
       },
       "id": "answer-callback",
@@ -165,7 +165,7 @@
         "url": "https://api.telegram.org/bot<ВАШ_ТОКЕН>/editMessageText",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  chat_id: $json.chat_id,\n  message_id: $json.message_id,\n  text: $json.message,\n  parse_mode: 'Markdown'\n}) }}",
+        "jsonBody": "={\n  \"chat_id\": {{ $json.chat_id }},\n  \"message_id\": {{ $json.message_id }},\n  \"text\": \"{{ $json.message }}\",\n  \"parse_mode\": \"Markdown\"\n}",
         "options": {}
       },
       "id": "edit-message",
