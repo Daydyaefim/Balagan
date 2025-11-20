@@ -200,7 +200,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Получаем данные от триггера и от БД\nconst items = $input.all();\nconst triggerData = items[0].json;\nconst dbData = items[1].json;\n\nconst chatId = triggerData.message.chat.id;\nconst command = triggerData.message.text;\n\n// Преобразуем все значения в числа\nconst temp = parseFloat(dbData.temperature) || 0;\nconst hum = parseFloat(dbData.humidity) || 0;\nconst water = parseFloat(dbData.water_level) || 0;\nconst outdoorTemp = parseFloat(dbData.outdoor_temperature) || null;\nconst pyrano = parseFloat(dbData.pyrano) || 0;\nconst windowPos = parseInt(dbData.window_position) || 0;\n\nlet message = '';\n\nif (command === '/status') {\n  message = `🌱 *ТЕПЛИЦА 1*\\n\\n`;\n  message += `🌡️ *Температура:* ${temp.toFixed(1)}°C\\n`;\n  message += `💧 *Влажность:* ${hum.toFixed(1)}%\\n`;\n  message += `🌡️ *Температура улицы:* ${outdoorTemp ? outdoorTemp.toFixed(1) + '°C' : 'н/д'}\\n`;\n  message += `💦 *Уровень раствора:* ${water.toFixed(1)}%\\n`;\n  message += `☀️ *Текущая радиация:* ${pyrano.toFixed(0)} Вт/м²\\n`;\n  message += `🪟 *Положение форточки:* ${windowPos}%\\n`;\n  message += `🕒 *Время ESP32:* ${new Date(dbData.timestamp_iso).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;\n} else if (command === '/poliv') {\n  message = `🌱 *ТЕПЛИЦА 1*\\n\\n`;\n  message += `🌡️ *Температура:* ${temp.toFixed(1)}°C\\n`;\n  message += `💧 *Влажность:* ${hum.toFixed(1)}%\\n`;\n  message += `🌡️ *Температура улицы:* ${outdoorTemp ? outdoorTemp.toFixed(1) + '°C' : 'н/д'}\\n`;\n  message += `💦 *Уровень раствора:* ${water.toFixed(1)}%\\n`;\n  message += `☀️ *Текущая радиация:* ${pyrano.toFixed(0)} Вт/м²\\n`;\n  message += `🪟 *Положение форточки:* ${windowPos}%\\n`;\n  message += `🕒 *Время ESP32:* ${new Date(dbData.timestamp_iso).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;\n}\n\nreturn [{\n  json: {\n    chat_id: chatId,\n    text: message,\n    parse_mode: 'Markdown'\n  }\n}];"
+        "jsCode": "// Получаем trigger data от предыдущей IF ноды и DB data от PostgreSQL\nconst triggerData = $('Needs Data?').first().json;\nconst dbData = $input.first().json;\n\nconst chatId = triggerData.message.chat.id;\nconst command = triggerData.message.text;\n\n// Преобразуем все значения в числа\nconst temp = parseFloat(dbData.temperature) || 0;\nconst hum = parseFloat(dbData.humidity) || 0;\nconst water = parseFloat(dbData.water_level) || 0;\nconst outdoorTemp = parseFloat(dbData.outdoor_temperature) || null;\nconst pyrano = parseFloat(dbData.pyrano) || 0;\nconst windowPos = parseInt(dbData.window_position) || 0;\n\nlet message = '';\n\nif (command === '/status') {\n  message = `🌱 *ТЕПЛИЦА 1*\\n\\n`;\n  message += `🌡️ *Температура:* ${temp.toFixed(1)}°C\\n`;\n  message += `💧 *Влажность:* ${hum.toFixed(1)}%\\n`;\n  message += `🌡️ *Температура улицы:* ${outdoorTemp ? outdoorTemp.toFixed(1) + '°C' : 'н/д'}\\n`;\n  message += `💦 *Уровень раствора:* ${water.toFixed(1)}%\\n`;\n  message += `☀️ *Текущая радиация:* ${pyrano.toFixed(0)} Вт/м²\\n`;\n  message += `🪟 *Положение форточки:* ${windowPos}%\\n`;\n  message += `🕒 *Время ESP32:* ${new Date(dbData.timestamp_iso).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;\n} else if (command === '/poliv') {\n  message = `🌱 *ТЕПЛИЦА 1*\\n\\n`;\n  message += `🌡️ *Температура:* ${temp.toFixed(1)}°C\\n`;\n  message += `💧 *Влажность:* ${hum.toFixed(1)}%\\n`;\n  message += `🌡️ *Температура улицы:* ${outdoorTemp ? outdoorTemp.toFixed(1) + '°C' : 'н/д'}\\n`;\n  message += `💦 *Уровень раствора:* ${water.toFixed(1)}%\\n`;\n  message += `☀️ *Текущая радиация:* ${pyrano.toFixed(0)} Вт/м²\\n`;\n  message += `🪟 *Положение форточки:* ${windowPos}%\\n`;\n  message += `🕒 *Время ESP32:* ${new Date(dbData.timestamp_iso).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;\n}\n\nreturn [{\n  json: {\n    chat_id: chatId,\n    text: message,\n    parse_mode: 'Markdown'\n  }\n}];"
       },
       "id": "format-data-command",
       "name": "Format Data Command",
@@ -209,21 +209,6 @@
       "position": [
         1120,
         550
-      ]
-    },
-    {
-      "parameters": {
-        "mode": "combine",
-        "combinationMode": "mergeByPosition",
-        "options": {}
-      },
-      "id": "merge-trigger-and-db",
-      "name": "Merge Trigger and DB",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "position": [
-        900,
-        600
       ]
     },
     {
@@ -364,11 +349,6 @@
       "main": [
         [
           {
-            "node": "Merge Trigger and DB",
-            "type": "main",
-            "index": 0
-          },
-          {
             "node": "Get Readings For Command",
             "type": "main",
             "index": 0
@@ -384,17 +364,6 @@
       ]
     },
     "Get Readings For Command": {
-      "main": [
-        [
-          {
-            "node": "Merge Trigger and DB",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Merge Trigger and DB": {
       "main": [
         [
           {
