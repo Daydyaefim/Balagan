@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UgAgro 95 - Умная Теплица</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body data-theme="light">
+    <!-- Навигационная панель -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="bi bi-flower1"></i> UgAgro 95 - Умная Теплица
+            </span>
+            <div class="d-flex align-items-center">
+                <button class="btn btn-outline-light btn-sm me-3" id="theme-toggle" title="Переключить тему">
+                    <i class="bi bi-moon-stars-fill"></i>
+                </button>
+                <span class="badge bg-light text-dark" id="connection-status">
+                    <i class="bi bi-circle-fill text-success"></i> Подключено
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <!-- Карточки текущих показаний -->
+        <div class="row mb-4">
+            <div class="col-lg-3 col-md-6 col-sm-6 mb-3">
+                <div class="card sensor-card" id="card-temperature">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Температура</h6>
+                                <h2 class="mb-0" id="temp-value">--</h2>
+                                <small class="text-muted">°C</small>
+                            </div>
+                            <div class="sensor-icon">
+                                <i class="bi bi-thermometer-half"></i>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">Норма: 10-40°C</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6 col-sm-6 mb-3">
+                <div class="card sensor-card" id="card-humidity">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Влажность</h6>
+                                <h2 class="mb-0" id="hum-value">--</h2>
+                                <small class="text-muted">%</small>
+                            </div>
+                            <div class="sensor-icon">
+                                <i class="bi bi-droplet-half"></i>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">Норма: 20-85%</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6 col-sm-6 mb-3">
+                <div class="card sensor-card" id="card-water">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Уровень Воды</h6>
+                                <h2 class="mb-0" id="water-value">--</h2>
+                                <small class="text-muted">%</small>
+                            </div>
+                            <div class="sensor-icon">
+                                <i class="bi bi-water"></i>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">Критично: &lt;5%</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6 col-sm-6 mb-3">
+                <div class="card sensor-card" id="card-wind">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-1">Скорость Ветра</h6>
+                                <h2 class="mb-0" id="wind-value">--</h2>
+                                <small class="text-muted">м/с</small>
+                            </div>
+                            <div class="sensor-icon">
+                                <i class="bi bi-wind"></i>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">Макс: 11 м/с</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Дополнительные показатели -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> Дополнительные Показания</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
+                                <strong>Темп. улицы:</strong> <span id="outdoor-temp">--</span>°C
+                            </div>
+                            <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
+                                <strong>Влаж. улицы:</strong> <span id="outdoor-hum">--</span>%
+                            </div>
+                            <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
+                                <strong>Темп. раствора:</strong> <span id="sol-temp">--</span>°C
+                            </div>
+                            <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
+                                <strong>Темп. мата:</strong> <span id="mat-temp">--</span>°C
+                            </div>
+                            <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
+                                <strong>EC мата:</strong> <span id="mat-ec">--</span> мС/см
+                            </div>
+                            <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
+                                <strong>Солн. радиация:</strong> <span id="solar-radiation">--</span> Вт/м²
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
+                                <strong>Пиранометр:</strong> <span id="pyrano-value">--</span> Вт/м²
+                            </div>
+                            <div class="col-lg-2 col-md-4 col-sm-6 mb-2">
+                                <strong>Позиция окна:</strong> <span id="window-pos">--</span>%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Состояние оборудования -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-gear-fill"></i> Состояние Оборудования</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-lg-3 col-md-6 mb-3">
+                                <div class="equipment-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <strong><i class="bi bi-fan"></i> Вентилятор:</strong>
+                                        <span id="fan-state" class="badge bg-secondary">--</span>
+                                    </div>
+                                    <small class="text-muted">Режим: <span id="fan-mode" class="badge badge-mode">--</span></small>
+                                </div>
+                            </div>
+                            <div class="col-lg-3 col-md-6 mb-3">
+                                <div class="equipment-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <strong><i class="bi bi-fire"></i> Обогрев:</strong>
+                                        <span id="heat-state" class="badge bg-secondary">--</span>
+                                    </div>
+                                    <small class="text-muted">Режим: <span id="heat-mode" class="badge badge-mode">--</span></small>
+                                </div>
+                            </div>
+                            <div class="col-lg-3 col-md-6 mb-3">
+                                <div class="equipment-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <strong><i class="bi bi-droplet"></i> Полив:</strong>
+                                        <span id="pump-state" class="badge bg-secondary">--</span>
+                                    </div>
+                                    <small class="text-muted">Режим: <span id="pump-mode" class="badge badge-mode">--</span></small>
+                                </div>
+                            </div>
+                            <div class="col-lg-3 col-md-6 mb-3">
+                                <div class="equipment-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <strong><i class="bi bi-cloud-fog"></i> Туман:</strong>
+                                        <span id="mist-state" class="badge bg-secondary">--</span>
+                                    </div>
+                                    <small class="text-muted">Режим: <span id="mist-mode" class="badge badge-mode">--</span></small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Единый график с вкладками -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card chart-card">
+                    <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> Мониторинг Параметров</h5>
+                        <button class="btn btn-sm btn-outline-primary" id="export-csv">
+                            <i class="bi bi-download"></i> Экспорт CSV
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <!-- Вкладки выбора данных -->
+                        <ul class="nav nav-pills mb-3" id="data-tabs">
+                            <li class="nav-item">
+                                <a class="nav-link active" data-metric="temperature" href="#"><i class="bi bi-thermometer-half"></i> Температура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-metric="humidity" href="#"><i class="bi bi-droplet-half"></i> Влажность</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-metric="outdoor" href="#"><i class="bi bi-cloud-sun"></i> Улица</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-metric="solar" href="#"><i class="bi bi-sun"></i> Солн. радиация</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-metric="mat-temp" href="#"><i class="bi bi-thermometer"></i> Темп. мата</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-metric="mat-ec" href="#"><i class="bi bi-lightning"></i> EC мата</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-metric="water" href="#"><i class="bi bi-water"></i> Вода</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-metric="wind" href="#"><i class="bi bi-wind"></i> Ветер</a>
+                            </li>
+                        </ul>
+
+                        <!-- Фильтры временного диапазона -->
+                        <div class="row mb-3 time-filters">
+                            <div class="col-md-6">
+                                <label class="form-label"><i class="bi bi-clock"></i> Временной диапазон:</label>
+                                <div class="btn-group w-100" role="group" id="time-range-buttons">
+                                    <input type="radio" class="btn-check" name="timeRange" id="range-hour" value="1" autocomplete="off">
+                                    <label class="btn btn-outline-primary" for="range-hour">1 Час</label>
+
+                                    <input type="radio" class="btn-check" name="timeRange" id="range-day" value="24" autocomplete="off" checked>
+                                    <label class="btn btn-outline-primary" for="range-day">1 День</label>
+
+                                    <input type="radio" class="btn-check" name="timeRange" id="range-3days" value="72" autocomplete="off">
+                                    <label class="btn btn-outline-primary" for="range-3days">3 Дня</label>
+
+                                    <input type="radio" class="btn-check" name="timeRange" id="range-week" value="168" autocomplete="off">
+                                    <label class="btn btn-outline-primary" for="range-week">Неделя</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label"><i class="bi bi-calendar"></i> Месяц:</label>
+                                <select class="form-select" id="month-select">
+                                    <option value="">Текущий</option>
+                                    <option value="1">Январь</option>
+                                    <option value="2">Февраль</option>
+                                    <option value="3">Март</option>
+                                    <option value="4">Апрель</option>
+                                    <option value="5">Май</option>
+                                    <option value="6">Июнь</option>
+                                    <option value="7">Июль</option>
+                                    <option value="8">Август</option>
+                                    <option value="9">Сентябрь</option>
+                                    <option value="10">Октябрь</option>
+                                    <option value="11">Ноябрь</option>
+                                    <option value="12">Декабрь</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label"><i class="bi bi-calendar-event"></i> Год:</label>
+                                <select class="form-select" id="year-select">
+                                    <!-- Заполняется динамически -->
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- График -->
+                        <div class="chart-container">
+                            <canvas id="unified-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Обновлено -->
+        <div class="row">
+            <div class="col-md-12 text-center text-muted footer-info">
+                <small>
+                    <i class="bi bi-clock-history"></i> Последнее обновление: <span id="last-update">--</span>
+                </small>
+                <br>
+                <small>
+                    <i class="bi bi-arrow-repeat"></i> Автообновление каждые 30 секунд
+                </small>
+                <br>
+                <small class="text-muted mt-2 d-block">
+                    <i class="bi bi-code-square"></i> Разработано с <i class="bi bi-heart-fill text-danger"></i> при помощи Claude Code
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

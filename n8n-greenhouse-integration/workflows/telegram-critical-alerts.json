@@ -1,0 +1,379 @@
+{
+  "name": "Telegram - Critical Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 20
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Every 20 Seconds",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ugagro_readings\nORDER BY timestamp DESC\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "get-latest",
+      "name": "Получить Последние Данные",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM telegram_alert_states;",
+        "options": {}
+      },
+      "id": "get-alert-states",
+      "name": "Получить Состояния Оповещений",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// После Merge каждый item содержит readings + state\nconst items = $input.all();\n\n// Readings берем из первого item (они одинаковые во всех)\nconst firstItem = items[0].json;\nconst reading = {\n  outdoor_temperature: firstItem.outdoor_temperature,\n  outdoor_humidity: firstItem.outdoor_humidity,\n  water_level: firstItem.water_level,\n  timestamp_iso: firstItem.timestamp_iso,\n  received_at: firstItem.received_at\n};\n\n// States извлекаем из каждого item\nconst states = items.map(item => ({\n  alert_type: item.json.alert_type,\n  is_active: item.json.is_active,\n  acknowledged_at: item.json.acknowledged_at,\n  mute_until: item.json.mute_until\n}));\n\n// Преобразуем в map для быстрого доступа\nconst statesMap = {};\nstates.forEach(s => {\n  if (s.alert_type) {\n    statesMap[s.alert_type] = s;\n  }\n});\n\n// Пороговые значения\nconst thresholds = {\n  high_temperature: { field: 'outdoor_temperature', max: 35, message: '🔥 КРИТИЧНО! Температура слишком высокая' },\n  low_temperature: { field: 'outdoor_temperature', min: 18, message: '❄️ КРИТИЧНО! Температура слишком низкая' },\n  high_humidity: { field: 'outdoor_humidity', max: 85, message: '💧 КРИТИЧНО! Влажность слишком высокая' },\n  low_humidity: { field: 'outdoor_humidity', min: 20, message: '🏜️ КРИТИЧНО! Влажность слишком низкая' },\n  low_water_level: { field: 'water_level', min: 5, message: '🚨 КРИТИЧНО! Уровень воды очень низкий!' }\n};\n\nconst alerts = [];\n\n// Проверка на потерю связи с ESP32\nconst lastUpdateTime = new Date(reading.received_at || reading.timestamp_iso).getTime();\nconst currentTime = new Date().getTime();\nconst minutesSinceUpdate = Math.floor((currentTime - lastUpdateTime) / 1000 / 60);\n\nconst connectionLostState = statesMap['esp32_connection_lost'];\nconst isConnectionLost = minutesSinceUpdate > 15;\n\n// Проверяем mute_until для потери связи\nconst isConnectionLostMuted = connectionLostState && connectionLostState.mute_until && new Date(connectionLostState.mute_until) > new Date();\nconst isConnectionLostAcknowledged = connectionLostState && connectionLostState.acknowledged_at;\n\nif (isConnectionLost && !isConnectionLostAcknowledged && !isConnectionLostMuted) {\n  alerts.push({\n    alert_type: 'esp32_connection_lost',\n    message: '🔴 КРИТИЧНО! Потеряна связь с ESP32',\n    field: 'connection',\n    current_value: minutesSinceUpdate,\n    threshold_max: 15,\n    timestamp: reading.timestamp_iso,\n    is_new: !connectionLostState || !connectionLostState.is_active,\n    readings: reading\n  });\n} else if (!isConnectionLost && connectionLostState && (connectionLostState.is_active || connectionLostState.acknowledged_at)) {\n  alerts.push({\n    alert_type: 'esp32_connection_lost',\n    action: 'deactivate'\n  });\n}\n\n// Проверяем каждое условие\nfor (const [alertType, config] of Object.entries(thresholds)) {\n  const value = parseFloat(reading[config.field]) || 0;\n  const state = statesMap[alertType];\n  \n  let isCritical = false;\n  \n  if (config.max !== undefined && value > config.max) {\n    isCritical = true;\n  }\n  if (config.min !== undefined && value < config.min) {\n    isCritical = true;\n  }\n  \n  const isMuted = state && state.mute_until && new Date(state.mute_until) > new Date();\n  const isAcknowledged = state && state.acknowledged_at;\n  \n  if (isCritical && !isAcknowledged && !isMuted) {\n    alerts.push({\n      alert_type: alertType,\n      message: config.message,\n      field: config.field,\n      current_value: value,\n      threshold_min: config.min,\n      threshold_max: config.max,\n      timestamp: reading.timestamp_iso,\n      is_new: !state || !state.is_active,\n      readings: reading\n    });\n  }\n  \n  if (!isCritical && state && (state.is_active || state.acknowledged_at)) {\n    alerts.push({\n      alert_type: alertType,\n      action: 'deactivate'\n    });\n  }\n}\n\nif (alerts.length === 0) {\n  return [];\n}\n\nreturn alerts.map(a => ({ json: a }));"
+      },
+      "id": "check-thresholds",
+      "name": "Проверка Порогов",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.action }}",
+              "operation": "notEqual",
+              "value2": "deactivate"
+            }
+          ]
+        }
+      },
+      "id": "filter-active-alerts",
+      "name": "Только Активные",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $input.first().json;\n\n// Если нет message - это deactivate объект, пропускаем\nif (!alert.message) {\n  return [];\n}\n\n// Readings передаются вместе с alert\nconst reading = alert.readings;\n\n// Если нет readings - выводим ошибку для отладки и пропускаем\nif (!reading) {\n  console.error('ОШИБКА: readings отсутствует в alert:', JSON.stringify(alert));\n  return [];\n}\n\nconst currentValue = parseFloat(alert.current_value) || 0;\n\nlet message = '';\n\n// Специальное форматирование для потери связи\nif (alert.alert_type === 'esp32_connection_lost') {\n  const minutesSinceUpdate = Math.floor(currentValue);\n  message = `${alert.message}\\n\\n`;\n  message += `⏱️ *Время с последнего обновления:* ${minutesSinceUpdate} мин\\n`;\n  message += `⚠️ *Критично после:* ${alert.threshold_max} мин\\n`;\n  message += `\\n🕒 *Последнее обновление:* ${new Date(alert.timestamp * 1000).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}\\n`;\n  message += `\\n━━━━━━━━━━━━━━━━━━━━━\\n`;\n  message += `\\n📋 *ПОСЛЕДНИЕ ПОКАЗАТЕЛИ:*\\n`;\n  message += `🌡️ Температура: ${parseFloat(reading.outdoor_temperature || 0).toFixed(1)}°C\\n`;\n  message += `💧 Влажность: ${parseFloat(reading.outdoor_humidity || 0).toFixed(1)}%\\n`;\n  message += `💦 Уровень воды: ${parseFloat(reading.water_level || 0).toFixed(1)}%\\n`;\n  message += `\\n⚠️ *Проверьте ESP32 и подключение к интернету!*`;\n} else {\n  message = `${alert.message}\\n\\n`;\n  message += `📊 *Текущее значение:* ${currentValue.toFixed(1)}\\n`;\n  \n  if (alert.threshold_min !== undefined) {\n    message += `⚠️ *Минимум:* ${alert.threshold_min}\\n`;\n  }\n  if (alert.threshold_max !== undefined) {\n    message += `⚠️ *Максимум:* ${alert.threshold_max}\\n`;\n  }\n  \n  message += `\\n🕒 *Время:* ${new Date(alert.timestamp * 1000).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}\\n`;\n  message += `\\n━━━━━━━━━━━━━━━━━━━━━\\n`;\n  message += `\\n📋 *ВСЕ ПОКАЗАТЕЛИ:*\\n`;\n  message += `🌡️ Температура: ${parseFloat(reading.outdoor_temperature || 0).toFixed(1)}°C\\n`;\n  message += `💧 Влажность: ${parseFloat(reading.outdoor_humidity || 0).toFixed(1)}%\\n`;\n  message += `💦 Уровень воды: ${parseFloat(reading.water_level || 0).toFixed(1)}%\\n`;\n}\n\nreturn [{\n  json: {\n    message: message,\n    alert_type: alert.alert_type,\n    current_value: currentValue,\n    is_new: alert.is_new\n  }\n}];"
+      },
+      "id": "format-alert",
+      "name": "Форматировать Оповещение",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Подготовка данных для отправки в Telegram\nconst data = $input.first().json;\nconst chatId = 'УКАЖИТЕ_ВАШ_TELEGRAM_CHAT_ID';\nconst text = data.message;\nconst alertType = data.alert_type;\n\n// Формируем тело запроса для Telegram API\nconst requestBody = {\n  chat_id: chatId,\n  text: text,\n  parse_mode: 'Markdown',\n  reply_markup: {\n    inline_keyboard: [\n      [\n        {\n          text: '✅ Подтвердить',\n          callback_data: `ack_${alertType}`\n        },\n        {\n          text: '🔕 Отключить на 1ч',\n          callback_data: `mute_${alertType}_1h`\n        }\n      ]\n    ]\n  }\n};\n\n// Сохраняем данные для следующих узлов\nreturn [{ \n  json: {\n    ...requestBody,\n    alert_type: alertType,\n    current_value: data.current_value,\n    message: text\n  }\n}];"
+      },
+      "id": "prepare-telegram-request",
+      "name": "Подготовить Telegram Запрос",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $credentials.telegramApi.accessToken }}/sendMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "telegramApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "send-alert",
+      "name": "Отправить Оповещение",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        200
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "UgAgro Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Подготовка SQL запроса для обновления состояния\nconst alertType = $json.alert_type || 'unknown';\nconst currentValue = $json.current_value || 0;\nconst message = ($json.message || '').replace(/'/g, \"''\");\n\n// UPSERT - создает запись если не существует, иначе обновляет\nconst sqlQuery = `\nINSERT INTO telegram_alert_states (\n  alert_type,\n  is_active,\n  last_sent_at,\n  current_value,\n  alert_count,\n  updated_at\n) VALUES (\n  '${alertType}',\n  true,\n  NOW(),\n  ${currentValue},\n  1,\n  NOW()\n)\nON CONFLICT (alert_type) DO UPDATE SET\n  is_active = true,\n  last_sent_at = NOW(),\n  current_value = ${currentValue},\n  alert_count = telegram_alert_states.alert_count + 1,\n  updated_at = NOW();\n\n-- Добавить в историю\nINSERT INTO ugagro_alerts_history (\n  alert_type,\n  alert_message,\n  sensor_value,\n  severity,\n  created_at\n) VALUES (\n  '${alertType}',\n  '${message}',\n  ${currentValue},\n  'critical',\n  NOW()\n);`;\n\nreturn [{ json: { sql_query: sqlQuery, alert_type: alertType } }];"
+      },
+      "id": "prepare-update-sql",
+      "name": "Подготовить SQL Обновления",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql_query }}",
+        "options": {}
+      },
+      "id": "update-state",
+      "name": "Обновить Состояние",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2220,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Подготовка SQL запроса для деактивации\nconst alertType = $json.alert_type || 'unknown';\n\nconst sqlQuery = `UPDATE telegram_alert_states\nSET \n  is_active = false,\n  acknowledged_at = NULL,\n  mute_until = NULL,\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';`;\n\nreturn [{ json: { sql_query: sqlQuery, alert_type: alertType } }];"
+      },
+      "id": "prepare-deactivate-sql",
+      "name": "Подготовить SQL Деактивации",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql_query }}",
+        "options": {}
+      },
+      "id": "deactivate-alert",
+      "name": "Деактивировать Оповещение",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1560,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "options": {}
+      },
+      "id": "merge-readings-states",
+      "name": "Объединить Readings и States",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [
+        790,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Every 20 Seconds": {
+      "main": [
+        [
+          {
+            "node": "Получить Последние Данные",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Получить Последние Данные": {
+      "main": [
+        [
+          {
+            "node": "Получить Состояния Оповещений",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Объединить Readings и States",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Получить Состояния Оповещений": {
+      "main": [
+        [
+          {
+            "node": "Объединить Readings и States",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Объединить Readings и States": {
+      "main": [
+        [
+          {
+            "node": "Проверка Порогов",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Проверка Порогов": {
+      "main": [
+        [
+          {
+            "node": "Только Активные",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Только Активные": {
+      "main": [
+        [
+          {
+            "node": "Форматировать Оповещение",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Подготовить SQL Деактивации",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Форматировать Оповещение": {
+      "main": [
+        [
+          {
+            "node": "Подготовить Telegram Запрос",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подготовить Telegram Запрос": {
+      "main": [
+        [
+          {
+            "node": "Отправить Оповещение",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Отправить Оповещение": {
+      "main": [
+        [
+          {
+            "node": "Подготовить SQL Обновления",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подготовить SQL Обновления": {
+      "main": [
+        [
+          {
+            "node": "Обновить Состояние",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подготовить SQL Деактивации": {
+      "main": [
+        [
+          {
+            "node": "Деактивировать Оповещение",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-18T00:00:00.000Z",
+  "versionId": "1"
+}

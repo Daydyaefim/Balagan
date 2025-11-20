@@ -1,0 +1,211 @@
+{
+  "name": "Database Migrations - Watering & Connection Lost",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Запустить Миграцию",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Создание таблицы настроек полива\nCREATE TABLE IF NOT EXISTS watering_settings (\n    id SERIAL PRIMARY KEY,\n    rad_threshold DECIMAL(10,2) DEFAULT 1.1,\n    watering_duration_sec INTEGER DEFAULT 200,\n    max_interval_minutes INTEGER DEFAULT 90,\n    watering_window_start TIME DEFAULT '07:40:00',\n    watering_window_end TIME DEFAULT '17:20:00',\n    manual_interval_minutes INTEGER DEFAULT 60,\n    morning_count INTEGER DEFAULT 3,\n    morning_start_time TIME DEFAULT '07:40:00',\n    morning_interval_minutes INTEGER DEFAULT 30,\n    updated_at TIMESTAMP NOT NULL DEFAULT NOW()\n);\n\n-- Вставить значения по умолчанию\nINSERT INTO watering_settings (\n    rad_threshold,\n    watering_duration_sec,\n    max_interval_minutes,\n    watering_window_start,\n    watering_window_end,\n    manual_interval_minutes,\n    morning_count,\n    morning_start_time,\n    morning_interval_minutes\n) VALUES (\n    1.1,\n    200,\n    90,\n    '07:40:00',\n    '17:20:00',\n    60,\n    3,\n    '07:40:00',\n    30\n)\nON CONFLICT DO NOTHING;\n\nSELECT 'watering_settings created' as result;",
+        "options": {}
+      },
+      "id": "create-watering-settings",
+      "name": "1. Создать watering_settings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        460,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Создание таблицы уведомлений о поливе\nCREATE TABLE IF NOT EXISTS watering_notifications (\n    id SERIAL PRIMARY KEY,\n    last_pump_state BOOLEAN DEFAULT FALSE,\n    last_check_timestamp TIMESTAMP NOT NULL DEFAULT NOW(),\n    last_notification_type VARCHAR(20),\n    last_notification_sent_at TIMESTAMP,\n    notifications_count INTEGER DEFAULT 0,\n    last_watering_start TIMESTAMP,\n    last_watering_end TIMESTAMP,\n    last_watering_duration_sec INTEGER,\n    updated_at TIMESTAMP NOT NULL DEFAULT NOW()\n);\n\n-- Вставить начальное значение\nINSERT INTO watering_notifications (\n    last_pump_state,\n    last_check_timestamp\n) VALUES (\n    FALSE,\n    NOW()\n)\nON CONFLICT DO NOTHING;\n\nSELECT 'watering_notifications created' as result;",
+        "options": {}
+      },
+      "id": "create-watering-notifications",
+      "name": "2. Создать watering_notifications",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        680,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Добавить новый тип оповещения - потеря связи с ESP32\nINSERT INTO telegram_alert_states (alert_type, is_active) VALUES\n    ('esp32_connection_lost', FALSE)\nON CONFLICT (alert_type) DO NOTHING;\n\nSELECT 'esp32_connection_lost alert added' as result;",
+        "options": {}
+      },
+      "id": "add-connection-lost-alert",
+      "name": "3. Добавить esp32_connection_lost",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        900,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Добавление столбцов для режимов работы оборудования\nALTER TABLE ugagro_readings\n    ADD COLUMN IF NOT EXISTS fan_mode VARCHAR(20) DEFAULT 'auto',\n    ADD COLUMN IF NOT EXISTS heat_mode VARCHAR(20) DEFAULT 'auto',\n    ADD COLUMN IF NOT EXISTS fog_mode VARCHAR(20) DEFAULT 'auto',\n    ADD COLUMN IF NOT EXISTS hydro_mix_mode VARCHAR(20) DEFAULT 'auto';\n-- Добавляем столбец для солнечной радиации (алиас для pyrano)\nALTER TABLE ugagro_readings\n    ADD COLUMN IF NOT EXISTS solar_radiation DECIMAL(5,2);\n-- Создаем триггер для синхронизации solar_radiation и pyrano\nCREATE OR REPLACE FUNCTION sync_solar_radiation() RETURNS TRIGGER AS $$\nBEGIN\n    IF NEW.pyrano IS NOT NULL THEN\n        NEW.solar_radiation := NEW.pyrano;\n    END IF;\n    IF NEW.solar_radiation IS NOT NULL THEN\n        NEW.pyrano := NEW.solar_radiation;\n    END IF;\n    RETURN NEW;\nEND;\n$$ LANGUAGE plpgsql;\nDROP TRIGGER IF EXISTS trigger_sync_solar_radiation ON ugagro_readings;\nCREATE TRIGGER trigger_sync_solar_radiation\n    BEFORE INSERT OR UPDATE ON ugagro_readings\n    FOR EACH ROW\n    EXECUTE FUNCTION sync_solar_radiation();\n-- Обновляем существующие записи\nUPDATE ugagro_readings SET solar_radiation = pyrano WHERE solar_radiation IS NULL;\nSELECT 'equipment_modes_migration_completed' as result;",
+        "options": {}
+      },
+      "id": "add-equipment-modes",
+      "name": "4. Добавить режимы оборудования",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Проверка созданных таблиц и данных\nSELECT 'watering_settings' as table_name, COUNT(*) as row_count FROM watering_settings\nUNION ALL\nSELECT 'watering_notifications' as table_name, COUNT(*) as row_count FROM watering_notifications\nUNION ALL\nSELECT 'telegram_alert_states (esp32_connection_lost)' as table_name, COUNT(*) as row_count\nFROM telegram_alert_states WHERE alert_type = 'esp32_connection_lost'\nUNION ALL\nSELECT 'ugagro_readings (equipment modes)' as table_name,\n       COUNT(*) FILTER (WHERE fan_mode IS NOT NULL) as row_count\nFROM ugagro_readings\nUNION ALL\nSELECT 'ugagro_readings (solar_radiation)' as table_name,\n       COUNT(*) FILTER (WHERE solar_radiation IS NOT NULL) as row_count\nFROM ugagro_readings;",
+        "options": {}
+      },
+      "id": "verify-migrations",
+      "name": "5. Проверить Результаты",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1120,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Форматируем результаты миграции\nconst results = $input.all().map(i => i.json);\n\nlet message = '✅ *МИГРАЦИЯ БАЗЫ ДАННЫХ ЗАВЕРШЕНА*\\n\\n';\nmessage += '📊 *Результаты:*\\n\\n';\n\nresults.forEach(result => {\n  if (Array.isArray(result)) {\n    result.forEach(row => {\n      message += `  • ${row.table_name}: ${row.row_count} записей\\n`;\n    });\n  } else {\n    message += `  • ${result.result || 'OK'}\\n`;\n  }\n});\n\nmessage += '\\n━━━━━━━━━━━━━━━━━━━━━\\n';\nmessage += '\\n🎉 Все миграции выполнены успешно!\\n';\nmessage += '\\n*Следующие шаги:*\\n';\nmessage += '1. Импортировать обновленные workflow\\n';\nmessage += '2. Настроить TELEGRAM_CHAT_ID в workflow уведомлений\\n';\nmessage += '3. Активировать все workflow\\n';\n\nconsole.log(message);\n\nreturn [{ json: { message, success: true } }];"
+      },
+      "id": "format-results",
+      "name": "Форматировать Результаты",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Запустить Миграцию": {
+      "main": [
+        [
+          {
+            "node": "1. Создать watering_settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Создать watering_settings": {
+      "main": [
+        [
+          {
+            "node": "2. Создать watering_notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Создать watering_notifications": {
+      "main": [
+        [
+          {
+            "node": "3. Добавить esp32_connection_lost",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Добавить esp32_connection_lost": {
+      "main": [
+        [
+          {
+            "node": "4. Добавить режимы оборудования",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Добавить режимы оборудования": {
+      "main": [
+        [
+          {
+            "node": "5. Проверить Результаты",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Проверить Результаты": {
+      "main": [
+        [
+          {
+            "node": "Форматировать Результаты",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-19T00:00:00.000Z",
+  "versionId": "1"
+}

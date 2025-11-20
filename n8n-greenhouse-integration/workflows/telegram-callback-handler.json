@@ -1,0 +1,245 @@
+{
+  "name": "Telegram - Callback Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "callback_query"
+        ]
+      },
+      "id": "telegram-trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "UgAgro Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Парсинг callback data от кнопок\nconst callback = $input.first().json;\n\nif (!callback || !callback.callback_query || !callback.callback_query.data) {\n  throw new Error('Некорректные данные callback');\n}\n\nconst callbackData = callback.callback_query.data;\nconst chatId = callback.callback_query.message.chat.id;\nconst messageId = callback.callback_query.message.message_id;\n\n// Парсим данные: \"ack_high_temperature\" или \"mute_low_humidity_1h\"\nconst parts = callbackData.split('_');\nconst action = parts[0]; // 'ack' или 'mute'\n\nlet alertType;\nlet muteDuration = null;\n\nif (action === 'ack') {\n  // ack_high_temperature\n  alertType = parts.slice(1).join('_');\n} else if (action === 'mute') {\n  // mute_low_humidity_1h\n  const durationStr = parts[parts.length - 1]; // \"1h\"\n  muteDuration = parseInt(durationStr) || 1; // часы\n  alertType = parts.slice(1, -1).join('_');\n}\n\nreturn [{\n  json: {\n    action: action,\n    alert_type: alertType,\n    mute_duration: muteDuration,\n    chat_id: chatId,\n    message_id: messageId,\n    user_id: callback.callback_query.from.id,\n    user_name: callback.callback_query.from.first_name || 'Пользователь'\n  }\n}];"
+      },
+      "id": "parse-callback",
+      "name": "Парсинг Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "ack",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "check-action",
+      "name": "Проверка Действия",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Подготовка SQL для подтверждения\nconst alertType = $json.alert_type || 'unknown';\n\nconst sqlQuery = `UPDATE telegram_alert_states\nSET \n  acknowledged_at = NOW(),\n  is_active = false,\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';\n\nSELECT alert_type, acknowledged_at FROM telegram_alert_states WHERE alert_type = '${alertType}';`;\n\nreturn [{ json: { ...($json), sql_query: sqlQuery } }];"
+      },
+      "id": "prepare-ack-sql",
+      "name": "Подготовить SQL Подтверждения",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql_query }}",
+        "options": {}
+      },
+      "id": "acknowledge-alert",
+      "name": "Подтвердить Оповещение",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1120,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Подготовка SQL для отключения\nconst alertType = $json.alert_type || 'unknown';\nconst muteDuration = $json.mute_duration || 1;\n\nconst sqlQuery = `UPDATE telegram_alert_states\nSET \n  mute_until = NOW() + INTERVAL '${muteDuration} hours',\n  is_active = false,\n  updated_at = NOW()\nWHERE alert_type = '${alertType}';\n\nSELECT alert_type, mute_until FROM telegram_alert_states WHERE alert_type = '${alertType}';`;\n\nreturn [{ json: { ...($json), sql_query: sqlQuery } }];"
+      },
+      "id": "prepare-mute-sql",
+      "name": "Подготовить SQL Отключения",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql_query }}",
+        "options": {}
+      },
+      "id": "mute-alert",
+      "name": "Отключить Оповещение",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1120,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot<ВАШ_ТОКЕН>/answerCallbackQuery",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"callback_query_id\": \"{{ $node[\"Telegram Trigger\"].json.callback_query.id }}\",\n  \"text\": \"Обработано ✓\"\n}",
+        "options": {}
+      },
+      "id": "answer-callback",
+      "name": "Ответить на Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Парсинг Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Парсинг Callback": {
+      "main": [
+        [
+          {
+            "node": "Проверка Действия",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Проверка Действия": {
+      "main": [
+        [
+          {
+            "node": "Подготовить SQL Подтверждения",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Подготовить SQL Отключения",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подготовить SQL Подтверждения": {
+      "main": [
+        [
+          {
+            "node": "Подтвердить Оповещение",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подготовить SQL Отключения": {
+      "main": [
+        [
+          {
+            "node": "Отключить Оповещение",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подтвердить Оповещение": {
+      "main": [
+        [
+          {
+            "node": "Ответить на Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Отключить Оповещение": {
+      "main": [
+        [
+          {
+            "node": "Ответить на Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-18T00:00:00.000Z",
+  "versionId": "1"
+}

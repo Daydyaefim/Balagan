@@ -1,0 +1,275 @@
+{
+  "name": "Telegram - Watering Notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Every 30 Seconds",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ugagro_readings\nORDER BY timestamp DESC\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "get-latest-reading",
+      "name": "Получить Последнее Показание",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM watering_notifications\nORDER BY id DESC\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "get-notification-state",
+      "name": "Получить Состояние Уведомлений",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 300],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const reading = $node[\"Получить Последнее Показание\"].json;\nconst notification = $input.first().json;\n\n// Текущее состояние насоса\nconst currentPumpState = reading.pump_state || false;\nconst lastPumpState = notification.last_pump_state || false;\n\n// Проверяем изменение состояния\nlet notificationType = null;\nlet shouldNotify = false;\n\nif (currentPumpState && !lastPumpState) {\n  // Насос включился - начало полива\n  notificationType = 'start';\n  shouldNotify = true;\n} else if (!currentPumpState && lastPumpState) {\n  // Насос выключился - конец полива\n  notificationType = 'end';\n  shouldNotify = true;\n}\n\nif (!shouldNotify) {\n  // Нет изменений - ничего не делаем\n  return [];\n}\n\n// Формируем данные для уведомления\nreturn [{\n  json: {\n    notification_type: notificationType,\n    current_pump_state: currentPumpState,\n    last_pump_state: lastPumpState,\n    temperature: parseFloat(reading.temperature) || 0,\n    humidity: parseFloat(reading.humidity) || 0,\n    pyrano: parseFloat(reading.pyrano) || 0,\n    rad_sum: parseFloat(reading.rad_sum) || 0,\n    cycle_count: parseInt(reading.cycle_count) || 0,\n    watering_mode: parseInt(reading.watering_mode) || 0,\n    timestamp: reading.timestamp_iso\n  }\n}];"
+      },
+      "id": "check-pump-state-change",
+      "name": "Проверка Изменения Состояния",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "leftValue": "={{ $json.notification_type }}",
+              "rightValue": "start",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "check-notification-type",
+      "name": "Проверка Типа Уведомления",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json;\n\n// Названия режимов (0=Авто, 1=Ручной, 2=Принудительный)\nconst modeNames = {\n  0: 'Авто',\n  1: 'Ручной',\n  2: 'Принудительный'\n};\n\nconst modeName = modeNames[data.watering_mode] || 'Неизвестный';\n\n// Конвертируем radSum из J/m² в MJ/m² для отображения\nconst radSumMJ = (data.rad_sum || 0) / 1000000;\n\n// Формируем сообщение о начале полива\nconst message = `💧 *ПОЛИВ НАЧАЛСЯ*\n\n⚙️ *Режим:* ${modeName}\n☀️ *Радиация:* ${data.pyrano.toFixed(0)} Вт/м²\n📊 *Накопленная радиация:* ${radSumMJ.toFixed(2)} МДж/м²\n🔄 *Цикл полива:* ${data.cycle_count}\n\n🌡️ *Температура:* ${data.temperature.toFixed(1)}°C\n💧 *Влажность:* ${data.humidity.toFixed(1)}%\n\n🕒 *Время:* ${new Date(data.timestamp).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;\n\nreturn [{\n  json: {\n    ...data,\n    message: message\n  }\n}];"
+      },
+      "id": "format-start-notification",
+      "name": "Форматировать Начало Полива",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json;\nconst lastWateringStart = $node[\"Получить Состояние Уведомлений\"].json.last_watering_start;\n\n// Рассчитываем длительность полива\nlet durationInfo = '';\nif (lastWateringStart) {\n  const startTime = new Date(lastWateringStart).getTime();\n  const endTime = new Date(data.timestamp).getTime();\n  const durationSec = Math.floor((endTime - startTime) / 1000);\n  \n  const minutes = Math.floor(durationSec / 60);\n  const seconds = durationSec % 60;\n  \n  durationInfo = `⏱️ *Длительность:* ${minutes > 0 ? minutes + 'мин ' : ''}${seconds}сек`;\n}\n\n// Конвертируем radSum из J/m² в MJ/m² для отображения\nconst radSumMJ = (data.rad_sum || 0) / 1000000;\n\n// Формируем сообщение о конце полива\nconst message = `✅ *ПОЛИВ ЗАВЕРШЕН*\n\n${durationInfo}\n\n🌡️ *Температура:* ${data.temperature.toFixed(1)}°C\n💧 *Влажность:* ${data.humidity.toFixed(1)}%\n☀️ *Радиация:* ${data.pyrano.toFixed(0)} Вт/м²\n📊 *Накопленная радиация:* ${radSumMJ.toFixed(2)} МДж/м²\n\n🕒 *Время:* ${new Date(data.timestamp).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;\n\nreturn [{\n  json: {\n    ...data,\n    message: message,\n    duration_sec: lastWateringStart ? Math.floor((new Date(data.timestamp).getTime() - new Date(lastWateringStart).getTime()) / 1000) : 0\n  }\n}];"
+      },
+      "id": "format-end-notification",
+      "name": "Форматировать Конец Полива",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "chatId": "УКАЖИТЕ_ВАШ_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parseMode": "Markdown"
+        }
+      },
+      "id": "send-telegram-notification",
+      "name": "Отправить Уведомление",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1560, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "UgAgro Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json;\nconst notificationType = data.notification_type;\n\nlet sqlQuery = '';\n\nif (notificationType === 'start') {\n  // Начало полива\n  sqlQuery = `\nUPDATE watering_notifications SET\n  last_pump_state = true,\n  last_check_timestamp = NOW(),\n  last_notification_type = 'start',\n  last_notification_sent_at = NOW(),\n  notifications_count = notifications_count + 1,\n  last_watering_start = NOW(),\n  updated_at = NOW()\nWHERE id = 1;\n`;\n} else if (notificationType === 'end') {\n  // Конец полива\n  const durationSec = data.duration_sec || 0;\n  \n  sqlQuery = `\nUPDATE watering_notifications SET\n  last_pump_state = false,\n  last_check_timestamp = NOW(),\n  last_notification_type = 'end',\n  last_notification_sent_at = NOW(),\n  notifications_count = notifications_count + 1,\n  last_watering_end = NOW(),\n  last_watering_duration_sec = ${durationSec},\n  updated_at = NOW()\nWHERE id = 1;\n`;\n}\n\nreturn [{ json: { sql_query: sqlQuery } }];"
+      },
+      "id": "prepare-update-sql",
+      "name": "Подготовить SQL Обновления",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql_query }}",
+        "options": {}
+      },
+      "id": "update-notification-state",
+      "name": "Обновить Состояние",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [2000, 300],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Every 30 Seconds": {
+      "main": [
+        [
+          {
+            "node": "Получить Последнее Показание",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Получить Последнее Показание": {
+      "main": [
+        [
+          {
+            "node": "Получить Состояние Уведомлений",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Получить Состояние Уведомлений": {
+      "main": [
+        [
+          {
+            "node": "Проверка Изменения Состояния",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Проверка Изменения Состояния": {
+      "main": [
+        [
+          {
+            "node": "Проверка Типа Уведомления",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Проверка Типа Уведомления": {
+      "main": [
+        [
+          {
+            "node": "Форматировать Начало Полива",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Форматировать Конец Полива",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Форматировать Начало Полива": {
+      "main": [
+        [
+          {
+            "node": "Отправить Уведомление",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Форматировать Конец Полива": {
+      "main": [
+        [
+          {
+            "node": "Отправить Уведомление",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Отправить Уведомление": {
+      "main": [
+        [
+          {
+            "node": "Подготовить SQL Обновления",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Подготовить SQL Обновления": {
+      "main": [
+        [
+          {
+            "node": "Обновить Состояние",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-19T00:00:00.000Z",
+  "versionId": "1"
+}
