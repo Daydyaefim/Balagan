@@ -119,26 +119,28 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "string": [
-            {
-              "value1": "={{ $json.callback_query }}",
-              "operation": "isEmpty"
-            },
-            {
-              "value1": "={{ $json.message.text }}",
-              "operation": "isNotEmpty"
-            }
-          ]
-        }
+        "jsCode": "const data = $input.first().json;\n\n// Фильтр для callback - пропускаем только callback_query\nconst isCallback = data.callback_query !== undefined && data.callback_query !== null;\n\nreturn isCallback ? [{ json: data }] : [];"
       },
-      "id": "if-command",
-      "name": "Is Command?",
-      "type": "n8n-nodes-base.if",
+      "id": "filter-callback",
+      "name": "Filter Callback",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         460,
-        600
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\n// Фильтр для message - пропускаем только обычные сообщения (не callback)\nconst isMessage = data.message !== undefined && data.message !== null && !data.callback_query;\n\nreturn isMessage ? [{ json: data }] : [];"
+      },
+      "id": "filter-message",
+      "name": "Filter Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        700
       ]
     },
     {
@@ -324,25 +326,34 @@
       "main": [
         [
           {
-            "node": "Is Command?",
+            "node": "Filter Callback",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter Message",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Is Command?": {
+    "Filter Callback": {
+      "main": [
+        [
+          {
+            "node": "Process Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Message": {
       "main": [
         [
           {
             "node": "Needs Data?",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Process Callback",
             "type": "main",
             "index": 0
           }
