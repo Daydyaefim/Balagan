@@ -118,7 +118,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\n\n// Проверяем наличие callback_query\nif (!data.callback_query || !data.callback_query.callback_data) {\n  console.error('Нет callback_query данных:', JSON.stringify(data));\n  return [];\n}\n\nconst callbackData = data.callback_query.callback_data;\nconst callbackQueryId = data.callback_query.id;\n\n// Парсим callback_data: \"ack_high_temperature\" или \"mute_high_temperature_1h\"\nlet alertType = '';\nlet action = '';\n\nif (callbackData.startsWith('ack_')) {\n  action = 'ack';\n  alertType = callbackData.substring(4);\n} else if (callbackData.startsWith('mute_')) {\n  action = 'mute';\n  const parts = callbackData.substring(5).split('_');\n  alertType = parts.slice(0, -1).join('_');\n}\n\n// Получаем состояния из workflow static data\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.alertStates) {\n  staticData.alertStates = {};\n}\n\nif (!staticData.alertStates[alertType]) {\n  staticData.alertStates[alertType] = { acknowledged: false, mutedUntil: null };\n}\n\nconst state = staticData.alertStates[alertType];\nlet responseText = '';\n\nif (action === 'ack') {\n  state.acknowledged = true;\n  responseText = '✅ Подтверждено. Спам остановлен до нормализации.';\n} else if (action === 'mute') {\n  const now = new Date();\n  const muteUntil = new Date(now.getTime() + 60 * 60 * 1000);\n  state.mutedUntil = muteUntil.toISOString();\n  state.acknowledged = true;\n  responseText = '🔕 Отключено на 1 час.';\n}\n\nstaticData.alertStates[alertType] = state;\n\nreturn [{\n  json: {\n    callback_query_id: callbackQueryId,\n    text: responseText,\n    show_alert: false\n  }\n}];"
+        "jsCode": "const data = $input.first().json;\nconst chatId = 'УКАЖИТЕ_ВАШ_TELEGRAM_CHAT_ID';\n\n// Получаем callback_data из разных возможных мест\nlet callbackData = '';\nif (data.callback_query && data.callback_query.data) {\n  callbackData = data.callback_query.data;\n} else if (data.callback_data) {\n  callbackData = data.callback_data;\n} else if (data.data) {\n  callbackData = data.data;\n}\n\n// Если нет callback_data - пробуем достать из message\nif (!callbackData) {\n  console.error('Не найден callback_data. Данные:', JSON.stringify(data));\n  return [];\n}\n\n// Парсим: \"ack_high_temperature\" или \"mute_high_temperature_1h\"\nlet alertType = '';\nlet action = '';\n\nif (callbackData.startsWith('ack_')) {\n  action = 'ack';\n  alertType = callbackData.substring(4);\n} else if (callbackData.startsWith('mute_')) {\n  action = 'mute';\n  const parts = callbackData.substring(5).split('_');\n  alertType = parts.slice(0, -1).join('_');\n}\n\n// Обновляем staticData\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.alertStates) {\n  staticData.alertStates = {};\n}\n\nif (!staticData.alertStates[alertType]) {\n  staticData.alertStates[alertType] = { acknowledged: false, mutedUntil: null };\n}\n\nconst state = staticData.alertStates[alertType];\nlet responseText = '';\n\nif (action === 'ack') {\n  state.acknowledged = true;\n  responseText = '✅ Подтверждено. Спам остановлен до нормализации условий.';\n} else if (action === 'mute') {\n  const now = new Date();\n  const muteUntil = new Date(now.getTime() + 60 * 60 * 1000);\n  state.mutedUntil = muteUntil.toISOString();\n  state.acknowledged = true;\n  responseText = '🔕 Оповещения отключены на 1 час.';\n}\n\nstaticData.alertStates[alertType] = state;\n\n// Возвращаем данные для отправки обычного сообщения\nreturn [{\n  json: {\n    chat_id: chatId,\n    text: responseText,\n    parse_mode: 'Markdown'\n  }\n}];"
       },
       "id": "process-callback",
       "name": "Process Callback",
@@ -132,7 +132,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://api.telegram.org/bot{{ $credentials.telegramApi.accessToken }}/answerCallbackQuery",
+        "url": "=https://api.telegram.org/bot{{ $credentials.telegramApi.accessToken }}/sendMessage",
         "authentication": "genericCredentialType",
         "genericAuthType": "telegramApi",
         "sendBody": true,
@@ -140,8 +140,8 @@
         "jsonBody": "={{ $json }}",
         "options": {}
       },
-      "id": "answer-callback",
-      "name": "Answer Callback",
+      "id": "send-confirmation",
+      "name": "Send Confirmation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -216,7 +216,7 @@
       "main": [
         [
           {
-            "node": "Answer Callback",
+            "node": "Send Confirmation",
             "type": "main",
             "index": 0
           }
