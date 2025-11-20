@@ -16,17 +16,25 @@
       "name": "Every 20 Seconds",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
-        "updates": ["callback_query"]
+        "updates": [
+          "callback_query"
+        ]
       },
       "id": "telegram-trigger",
       "name": "Telegram Callback",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.1,
-      "position": [240, 600],
+      "position": [
+        240,
+        600
+      ],
       "webhookId": "telegram-callback-unified",
       "credentials": {
         "telegramApi": {
@@ -45,7 +53,10 @@
       "name": "Get Latest Readings",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [460, 300],
+      "position": [
+        460,
+        300
+      ],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -61,7 +72,10 @@
       "name": "Check Thresholds",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -71,7 +85,10 @@
       "name": "Format Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [
+        900,
+        300
+      ]
     },
     {
       "parameters": {
@@ -88,7 +105,10 @@
       "name": "Send to Telegram",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1120, 300],
+      "position": [
+        1120,
+        300
+      ],
       "credentials": {
         "telegramApi": {
           "id": "telegram_bot",
@@ -98,13 +118,16 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst callbackData = data.callback_query.callback_data;\nconst callbackQueryId = data.callback_query.id;\n\n// Парсим callback_data: \"ack_high_temperature\" или \"mute_high_temperature_1h\"\nlet alertType = '';\nlet action = '';\n\nif (callbackData.startsWith('ack_')) {\n  action = 'ack';\n  alertType = callbackData.substring(4); // убираем \"ack_\"\n} else if (callbackData.startsWith('mute_')) {\n  action = 'mute';\n  // \"mute_high_temperature_1h\" -> убираем \"mute_\" и \"_1h\"\n  const parts = callbackData.substring(5).split('_');\n  alertType = parts.slice(0, -1).join('_'); // все кроме последнего \"1h\"\n}\n\n// Получаем состояния из того же workflow static data!\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.alertStates) {\n  staticData.alertStates = {};\n}\n\nif (!staticData.alertStates[alertType]) {\n  staticData.alertStates[alertType] = { acknowledged: false, mutedUntil: null };\n}\n\nconst state = staticData.alertStates[alertType];\nlet responseText = '';\n\nif (action === 'ack') {\n  // Подтверждение - останавливаем спам\n  state.acknowledged = true;\n  responseText = '✅ Подтверждено. Спам остановлен до нормализации.';\n} else if (action === 'mute') {\n  // Отключение на время\n  const now = new Date();\n  const muteUntil = new Date(now.getTime() + 60 * 60 * 1000); // +1 час\n  state.mutedUntil = muteUntil.toISOString();\n  state.acknowledged = true;\n  responseText = '🔕 Отключено на 1 час.';\n}\n\n// Сохраняем в тот же staticData!\nstaticData.alertStates[alertType] = state;\n\nreturn [{\n  json: {\n    callback_query_id: callbackQueryId,\n    text: responseText,\n    show_alert: false\n  }\n}];"
+        "jsCode": "const data = $input.first().json;\n\n// Проверяем наличие callback_query\nif (!data.callback_query || !data.callback_query.callback_data) {\n  console.error('Нет callback_query данных:', JSON.stringify(data));\n  return [];\n}\n\nconst callbackData = data.callback_query.callback_data;\nconst callbackQueryId = data.callback_query.id;\n\n// Парсим callback_data: \"ack_high_temperature\" или \"mute_high_temperature_1h\"\nlet alertType = '';\nlet action = '';\n\nif (callbackData.startsWith('ack_')) {\n  action = 'ack';\n  alertType = callbackData.substring(4);\n} else if (callbackData.startsWith('mute_')) {\n  action = 'mute';\n  const parts = callbackData.substring(5).split('_');\n  alertType = parts.slice(0, -1).join('_');\n}\n\n// Получаем состояния из workflow static data\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.alertStates) {\n  staticData.alertStates = {};\n}\n\nif (!staticData.alertStates[alertType]) {\n  staticData.alertStates[alertType] = { acknowledged: false, mutedUntil: null };\n}\n\nconst state = staticData.alertStates[alertType];\nlet responseText = '';\n\nif (action === 'ack') {\n  state.acknowledged = true;\n  responseText = '✅ Подтверждено. Спам остановлен до нормализации.';\n} else if (action === 'mute') {\n  const now = new Date();\n  const muteUntil = new Date(now.getTime() + 60 * 60 * 1000);\n  state.mutedUntil = muteUntil.toISOString();\n  state.acknowledged = true;\n  responseText = '🔕 Отключено на 1 час.';\n}\n\nstaticData.alertStates[alertType] = state;\n\nreturn [{\n  json: {\n    callback_query_id: callbackQueryId,\n    text: responseText,\n    show_alert: false\n  }\n}];"
       },
       "id": "process-callback",
       "name": "Process Callback",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 600]
+      "position": [
+        460,
+        600
+      ]
     },
     {
       "parameters": {
@@ -121,7 +144,10 @@
       "name": "Answer Callback",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 600],
+      "position": [
+        680,
+        600
+      ],
       "credentials": {
         "telegramApi": {
           "id": "telegram_bot",
@@ -132,22 +158,70 @@
   ],
   "connections": {
     "Every 20 Seconds": {
-      "main": [[{ "node": "Get Latest Readings", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Get Latest Readings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Get Latest Readings": {
-      "main": [[{ "node": "Check Thresholds", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Check Thresholds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Check Thresholds": {
-      "main": [[{ "node": "Format Message", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Format Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Format Message": {
-      "main": [[{ "node": "Send to Telegram", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Send to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Telegram Callback": {
-      "main": [[{ "node": "Process Callback", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Process Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Process Callback": {
-      "main": [[{ "node": "Answer Callback", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Answer Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
