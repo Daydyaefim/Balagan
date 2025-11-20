@@ -139,15 +139,85 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst chatId = data.message.chat.id;\nconst command = data.message.text;\n\nlet responseText = '';\n\nif (command === '/start') {\n    responseText = '👋 Привет! Я бот мониторинга теплицы.\\n\\n';\n    responseText += 'Команды:\\n';\n    responseText += '/status - текущее состояние\\n';\n    responseText += '/poliv - информация о поливе\\n';\n    responseText += '/help - помощь';\n} \nelse if (command === '/status') {\n    // Получаем последние данные из staticData или делаем запрос\n    const staticData = $getWorkflowStaticData('global');\n    \n    responseText = '📊 *Текущее состояние теплицы:*\\n\\n';\n    responseText += 'Используйте этот бот для получения критических оповещений.\\n';\n    responseText += 'Бот мониторит условия каждые 20 секунд.\\n\\n';\n    \n    if (staticData.alertStates) {\n        responseText += '*Активные оповещения:*\\n';\n        let hasAlerts = false;\n        for (const [alertType, state] of Object.entries(staticData.alertStates)) {\n            if (state.acknowledged) {\n                responseText += `• ${alertType}: подтверждено\\n`;\n                hasAlerts = true;\n            }\n            if (state.mutedUntil) {\n                responseText += `• ${alertType}: отключено до ${new Date(state.mutedUntil).toLocaleString('ru-RU')}\\n`;\n                hasAlerts = true;\n            }\n        }\n        if (!hasAlerts) {\n            responseText += 'Нет активных оповещений\\n';\n        }\n    }\n}\nelse if (command === '/poliv') {\n    responseText = '💧 *Информация о поливе:*\\n\\n';\n    responseText += 'Для получения детальной информации о поливе используйте основную панель управления.\\n';\n    responseText += 'Бот отправляет только критические оповещения.';\n}\nelse if (command === '/help') {\n    responseText = '❓ *Помощь*\\n\\n';\n    responseText += 'Бот автоматически отправляет критические оповещения:\\n';\n    responseText += '• 🔥 Высокая температура\\n';\n    responseText += '• ❄️ Низкая температура\\n';\n    responseText += '• 💧 Высокая влажность\\n';\n    responseText += '• 🏜️ Низкая влажность\\n';\n    responseText += '• 🚨 Низкий уровень воды\\n\\n';\n    responseText += 'Используйте кнопки для подтверждения или отключения оповещений.';\n}\nelse {\n    responseText = 'Неизвестная команда. Используйте /help для списка команд.';\n}\n\nreturn [{\n    json: {\n        chat_id: chatId,\n        text: responseText,\n        parse_mode: 'Markdown'\n    }\n}];"
+        "jsCode": "const data = $input.first().json;\nconst chatId = data.message.chat.id;\nconst command = data.message.text;\n\nlet responseText = '';\n\nif (command === '/start') {\n    responseText = '👋 Привет! Я бот мониторинга теплицы.\\n\\n';\n    responseText += 'Команды:\\n';\n    responseText += '/status - текущее состояние\\n';\n    responseText += '/poliv - информация о поливе\\n';\n    responseText += '/help - помощь';\n} \nelse if (command === '/help') {\n    responseText = '❓ *Помощь*\\n\\n';\n    responseText += 'Бот автоматически отправляет критические оповещения:\\n';\n    responseText += '• 🔥 Высокая температура\\n';\n    responseText += '• ❄️ Низкая температура\\n';\n    responseText += '• 💧 Высокая влажность\\n';\n    responseText += '• 🏜️ Низкая влажность\\n';\n    responseText += '• 🚨 Низкий уровень воды\\n\\n';\n    responseText += 'Используйте кнопки для подтверждения или отключения оповещений.';\n}\nelse {\n    responseText = 'Неизвестная команда. Используйте /help для списка команд.';\n}\n\nreturn [{\n    json: {\n        chat_id: chatId,\n        text: responseText,\n        parse_mode: 'Markdown'\n    }\n}];"
       },
-      "id": "process-commands",
-      "name": "Process Commands",
+      "id": "process-simple-commands",
+      "name": "Process Simple Commands",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        680,
+        900,
         700
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.message.text }}",
+              "operation": "regex",
+              "value2": "^/(status|poliv)$"
+            }
+          ]
+        }
+      },
+      "id": "if-needs-data",
+      "name": "Needs Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ugagro_readings ORDER BY timestamp DESC LIMIT 1;",
+        "options": {}
+      },
+      "id": "get-readings-for-command",
+      "name": "Get Readings For Command",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        900,
+        550
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Получаем данные от триггера и от БД\nconst items = $input.all();\nconst triggerData = items[0].json;\nconst dbData = items[1].json;\n\nconst chatId = triggerData.message.chat.id;\nconst command = triggerData.message.text;\n\n// Преобразуем все значения в числа\nconst temp = parseFloat(dbData.temperature) || 0;\nconst hum = parseFloat(dbData.humidity) || 0;\nconst water = parseFloat(dbData.water_level) || 0;\nconst outdoorTemp = parseFloat(dbData.outdoor_temperature) || null;\nconst pyrano = parseFloat(dbData.pyrano) || 0;\nconst windowPos = parseInt(dbData.window_position) || 0;\n\nlet message = '';\n\nif (command === '/status') {\n  message = `🌱 *ТЕПЛИЦА 1*\\n\\n`;\n  message += `🌡️ *Температура:* ${temp.toFixed(1)}°C\\n`;\n  message += `💧 *Влажность:* ${hum.toFixed(1)}%\\n`;\n  message += `🌡️ *Температура улицы:* ${outdoorTemp ? outdoorTemp.toFixed(1) + '°C' : 'н/д'}\\n`;\n  message += `💦 *Уровень раствора:* ${water.toFixed(1)}%\\n`;\n  message += `☀️ *Текущая радиация:* ${pyrano.toFixed(0)} Вт/м²\\n`;\n  message += `🪟 *Положение форточки:* ${windowPos}%\\n`;\n  message += `🕒 *Время ESP32:* ${new Date(dbData.timestamp_iso).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;\n} else if (command === '/poliv') {\n  message = `🌱 *ТЕПЛИЦА 1*\\n\\n`;\n  message += `🌡️ *Температура:* ${temp.toFixed(1)}°C\\n`;\n  message += `💧 *Влажность:* ${hum.toFixed(1)}%\\n`;\n  message += `🌡️ *Температура улицы:* ${outdoorTemp ? outdoorTemp.toFixed(1) + '°C' : 'н/д'}\\n`;\n  message += `💦 *Уровень раствора:* ${water.toFixed(1)}%\\n`;\n  message += `☀️ *Текущая радиация:* ${pyrano.toFixed(0)} Вт/м²\\n`;\n  message += `🪟 *Положение форточки:* ${windowPos}%\\n`;\n  message += `🕒 *Время ESP32:* ${new Date(dbData.timestamp_iso).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;\n}\n\nreturn [{\n  json: {\n    chat_id: chatId,\n    text: message,\n    parse_mode: 'Markdown'\n  }\n}];"
+      },
+      "id": "format-data-command",
+      "name": "Format Data Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-trigger-and-db",
+      "name": "Merge Trigger and DB",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        900,
+        600
       ]
     },
     {
@@ -235,17 +305,6 @@
         ]
       ]
     },
-    "Telegram Callback": {
-      "main": [
-        [
-          {
-            "node": "Process Callback",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Process Callback": {
       "main": [
         [
@@ -279,14 +338,70 @@
         ],
         [
           {
-            "node": "Process Commands",
+            "node": "Needs Data?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Process Commands": {
+    "Needs Data?": {
+      "main": [
+        [
+          {
+            "node": "Merge Trigger and DB",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Readings For Command",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Simple Commands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Readings For Command": {
+      "main": [
+        [
+          {
+            "node": "Merge Trigger and DB",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Trigger and DB": {
+      "main": [
+        [
+          {
+            "node": "Format Data Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Data Command": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Simple Commands": {
       "main": [
         [
           {
