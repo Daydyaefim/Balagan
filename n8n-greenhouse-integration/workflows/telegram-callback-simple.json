@@ -1,0 +1,72 @@
+{
+  "name": "Telegram Callback Simple",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["callback_query"]
+      },
+      "id": "telegram-trigger",
+      "name": "Telegram Callback",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "telegram-callback-webhook",
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "Telegram Bot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst callbackData = data.callback_query.callback_data;\nconst callbackQueryId = data.callback_query.id;\n\n// Парсим callback_data: \"ack_low_temperature\" или \"mute_low_temperature_1h\"\nconst parts = callbackData.split('_');\nconst action = parts[0]; // \"ack\" или \"mute\"\nconst alertType = parts.slice(1, -1).join('_'); // \"low_temperature\"\nconst duration = parts[parts.length - 1]; // \"1h\" или последняя часть alertType\n\n// Получаем состояния из workflow static data\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.alertStates) {\n  staticData.alertStates = {};\n}\n\nif (!staticData.alertStates[alertType]) {\n  staticData.alertStates[alertType] = { acknowledged: false, mutedUntil: null };\n}\n\nconst state = staticData.alertStates[alertType];\nlet responseText = '';\n\nif (action === 'ack') {\n  // Подтверждение - останавливаем спам\n  state.acknowledged = true;\n  responseText = '✅ Подтверждено. Спам остановлен до нормализации.';\n} else if (action === 'mute') {\n  // Отключение на время\n  const now = new Date();\n  const muteUntil = new Date(now.getTime() + 60 * 60 * 1000); // +1 час\n  state.mutedUntil = muteUntil.toISOString();\n  state.acknowledged = true;\n  responseText = '🔕 Отключено на 1 час.';\n}\n\n// Сохраняем\nstaticData.alertStates[alertType] = state;\n\nreturn [{\n  json: {\n    callback_query_id: callbackQueryId,\n    text: responseText,\n    show_alert: false\n  }\n}];"
+      },
+      "id": "process-callback",
+      "name": "Process Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $credentials.telegramApi.accessToken }}/answerCallbackQuery",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "telegramApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "answer-callback",
+      "name": "Answer Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "Telegram Bot API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Callback": {
+      "main": [[{ "node": "Process Callback", "type": "main", "index": 0 }]]
+    },
+    "Process Callback": {
+      "main": [[{ "node": "Answer Callback", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-20T00:00:00.000Z",
+  "versionId": "1"
+}

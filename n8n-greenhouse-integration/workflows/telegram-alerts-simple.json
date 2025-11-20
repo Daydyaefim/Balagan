@@ -1,0 +1,106 @@
+{
+  "name": "Telegram Alerts Simple",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 20
+            }
+          ]
+        }
+      },
+      "id": "schedule",
+      "name": "Every 20 Seconds",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ugagro_readings ORDER BY timestamp DESC LIMIT 1;",
+        "options": {}
+      },
+      "id": "get-readings",
+      "name": "Get Latest Readings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "greenhouse_db",
+          "name": "Greenhouse PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Получаем readings\nconst reading = $input.first().json;\n\n// Получаем состояния из workflow static data (хранится между запусками)\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.alertStates) {\n  staticData.alertStates = {};\n}\n\nconst states = staticData.alertStates;\n\n// Пороговые значения\nconst thresholds = {\n  high_temperature: { \n    field: 'outdoor_temperature', \n    max: 22, \n    message: '🔥 КРИТИЧНО! Температура слишком высокая' \n  },\n  low_temperature: { \n    field: 'outdoor_temperature', \n    min: 18, \n    message: '❄️ КРИТИЧНО! Температура слишком низкая' \n  },\n  high_humidity: { \n    field: 'outdoor_humidity', \n    max: 85, \n    message: '💧 КРИТИЧНО! Влажность слишком высокая' \n  },\n  low_humidity: { \n    field: 'outdoor_humidity', \n    min: 20, \n    message: '🏜️ КРИТИЧНО! Влажность слишком низкая' \n  },\n  low_water_level: { \n    field: 'water_level', \n    min: 5, \n    message: '🚨 КРИТИЧНО! Уровень воды очень низкий!' \n  }\n};\n\nconst alerts = [];\nconst now = new Date();\n\n// Проверяем каждый порог\nfor (const [alertType, config] of Object.entries(thresholds)) {\n  const value = parseFloat(reading[config.field]) || 0;\n  \n  // Инициализируем состояние если нет\n  if (!states[alertType]) {\n    states[alertType] = { acknowledged: false, mutedUntil: null };\n  }\n  \n  const state = states[alertType];\n  \n  // Проверяем критичность\n  let isCritical = false;\n  if (config.max !== undefined && value > config.max) isCritical = true;\n  if (config.min !== undefined && value < config.min) isCritical = true;\n  \n  // Проверяем muted\n  const isMuted = state.mutedUntil && new Date(state.mutedUntil) > now;\n  \n  // Если критично и не acknowledged и не muted - отправляем\n  if (isCritical && !state.acknowledged && !isMuted) {\n    alerts.push({\n      alert_type: alertType,\n      message: config.message,\n      current_value: value,\n      threshold_min: config.min,\n      threshold_max: config.max,\n      outdoor_temperature: reading.outdoor_temperature,\n      outdoor_humidity: reading.outdoor_humidity,\n      water_level: reading.water_level\n    });\n  }\n  \n  // Если не критично - сбрасываем acknowledged\n  if (!isCritical && state.acknowledged) {\n    state.acknowledged = false;\n    state.mutedUntil = null;\n  }\n}\n\n// Сохраняем обновленные состояния\nstaticData.alertStates = states;\n\nif (alerts.length === 0) {\n  return [];\n}\n\nreturn alerts.map(a => ({ json: a }));"
+      },
+      "id": "check-thresholds",
+      "name": "Check Thresholds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $input.first().json;\nconst chatId = 'УКАЖИТЕ_ВАШ_TELEGRAM_CHAT_ID';\n\nconst currentValue = parseFloat(alert.current_value) || 0;\n\nlet message = `${alert.message}\\n\\n`;\nmessage += `📊 *Текущее значение:* ${currentValue.toFixed(1)}\\n`;\n\nif (alert.threshold_min !== undefined) {\n  message += `⚠️ *Минимум:* ${alert.threshold_min}\\n`;\n}\nif (alert.threshold_max !== undefined) {\n  message += `⚠️ *Максимум:* ${alert.threshold_max}\\n`;\n}\n\nmessage += `\\n━━━━━━━━━━━━━━━━━━━━━\\n`;\nmessage += `\\n📋 *ВСЕ ПОКАЗАТЕЛИ:*\\n`;\nmessage += `🌡️ Температура: ${parseFloat(alert.outdoor_temperature).toFixed(1)}°C\\n`;\nmessage += `💧 Влажность: ${parseFloat(alert.outdoor_humidity).toFixed(1)}%\\n`;\nmessage += `💦 Уровень воды: ${parseFloat(alert.water_level).toFixed(1)}%\\n`;\n\nreturn [{\n  json: {\n    chat_id: chatId,\n    text: message,\n    parse_mode: 'Markdown',\n    reply_markup: {\n      inline_keyboard: [[\n        {\n          text: '✅ Подтвердить',\n          callback_data: `ack_${alert.alert_type}`\n        },\n        {\n          text: '🔕 Отключить на 1ч',\n          callback_data: `mute_${alert.alert_type}_1h`\n        }\n      ]]\n    }\n  }\n}];"
+      },
+      "id": "format-message",
+      "name": "Format Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $credentials.telegramApi.accessToken }}/sendMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "telegramApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "send-telegram",
+      "name": "Send to Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "Telegram Bot API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 20 Seconds": {
+      "main": [[{ "node": "Get Latest Readings", "type": "main", "index": 0 }]]
+    },
+    "Get Latest Readings": {
+      "main": [[{ "node": "Check Thresholds", "type": "main", "index": 0 }]]
+    },
+    "Check Thresholds": {
+      "main": [[{ "node": "Format Message", "type": "main", "index": 0 }]]
+    },
+    "Format Message": {
+      "main": [[{ "node": "Send to Telegram", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-20T00:00:00.000Z",
+  "versionId": "1"
+}
