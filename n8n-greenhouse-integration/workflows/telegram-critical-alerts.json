@@ -67,15 +67,11 @@
     {
       "parameters": {
         "conditions": {
-          "options": {},
-          "conditions": [
+          "string": [
             {
-              "leftValue": "={{ $json.action }}",
-              "rightValue": "deactivate",
-              "operator": {
-                "type": "string",
-                "operation": "notEquals"
-              }
+              "value1": "={{ $json.action }}",
+              "operation": "notEqual",
+              "value2": "deactivate"
             }
           ]
         }
