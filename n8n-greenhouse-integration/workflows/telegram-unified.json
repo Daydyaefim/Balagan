@@ -122,14 +122,14 @@
         "conditions": {
           "string": [
             {
-              "value1": "={{ $json.callback_query ? $json.callback_query.data : '' }}",
+              "value1": "={{ $json.message.text }}",
               "operation": "isNotEmpty"
             }
           ]
         }
       },
-      "id": "if-callback",
-      "name": "Is Callback?",
+      "id": "if-command",
+      "name": "Is Command?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
@@ -320,25 +320,25 @@
       "main": [
         [
           {
-            "node": "Is Callback?",
+            "node": "Is Command?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Is Callback?": {
+    "Is Command?": {
       "main": [
         [
           {
-            "node": "Process Callback",
+            "node": "Needs Data?",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Needs Data?",
+            "node": "Process Callback",
             "type": "main",
             "index": 0
           }
