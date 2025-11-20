@@ -119,18 +119,11 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "string": [
-            {
-              "value1": "={{ $json.callback_query }}",
-              "operation": "isNotEmpty"
-            }
-          ]
-        }
+        "jsCode": "const data = $input.first().json;\n\n// Определяем тип: callback или message\nconst isCallback = data.callback_query !== undefined && data.callback_query !== null;\n\n// TRUE = callback, FALSE = message/command\nreturn isCallback ? [{ json: data }] : [];"
       },
       "id": "if-callback",
-      "name": "Is Callback?",
-      "type": "n8n-nodes-base.if",
+      "name": "Filter Callback",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         460,
@@ -148,6 +141,19 @@
       "position": [
         680,
         500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\n// Пропускаем только если это message (не callback)\nconst isMessage = data.message !== undefined && data.message !== null;\n\nreturn isMessage ? [{ json: data }] : [];"
+      },
+      "id": "filter-message",
+      "name": "Filter Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        700
       ]
     },
     {
@@ -239,14 +245,19 @@
       "main": [
         [
           {
-            "node": "Is Callback?",
+            "node": "Filter Callback",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter Message",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Is Callback?": {
+    "Filter Callback": {
       "main": [
         [
           {
@@ -254,7 +265,11 @@
             "type": "main",
             "index": 0
           }
-        ],
+        ]
+      ]
+    },
+    "Filter Message": {
+      "main": [
         [
           {
             "node": "Process Command",
