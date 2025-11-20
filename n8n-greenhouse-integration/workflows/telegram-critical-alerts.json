@@ -16,7 +16,10 @@
       "name": "Schedule Every 20 Seconds",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -28,7 +31,10 @@
       "name": "Получить Последние Данные",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [460, 300],
+      "position": [
+        460,
+        300
+      ],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -46,7 +52,10 @@
       "name": "Получить Состояния Оповещений",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [680, 300],
+      "position": [
+        680,
+        300
+      ],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -56,13 +65,16 @@
     },
     {
       "parameters": {
-        "jsCode": "// После Merge в режиме append:\n// items[0] = readings, items[1..N] = states\nconst items = $input.all();\n\n// Первый item - это readings\nconst reading = items[0].json;\n\n// Остальные items - это states\nconst states = items.slice(1).map(i => i.json);\n\n// Преобразуем в map для быстрого доступа\nconst statesMap = {};\nstates.forEach(s => {\n  statesMap[s.alert_type] = s;\n});\n\n// Пороговые значения\nconst thresholds = {\n  high_temperature: { field: 'temperature', max: 35, message: '🔥 КРИТИЧНО! Температура слишком высокая' },\n  low_temperature: { field: 'temperature', min: 18, message: '❄️ КРИТИЧНО! Температура слишком низкая' },\n  high_humidity: { field: 'humidity', max: 85, message: '💧 КРИТИЧНО! Влажность слишком высокая' },\n  low_humidity: { field: 'humidity', min: 20, message: '🏜️ КРИТИЧНО! Влажность слишком низкая' },\n  low_water_level: { field: 'water_level', min: 5, message: '🚨 КРИТИЧНО! Уровень воды очень низкий!' },\n  high_wind_speed: { field: 'wind_speed', max: 11, message: '💨 КРИТИЧНО! Слишком сильный ветер!' }\n};\n\nconst alerts = [];\n\n// Проверка на потерю связи с ESP32\nconst lastUpdateTime = new Date(reading.received_at || reading.timestamp_iso).getTime();\nconst currentTime = new Date().getTime();\nconst minutesSinceUpdate = Math.floor((currentTime - lastUpdateTime) / 1000 / 60);\n\nconst connectionLostState = statesMap['esp32_connection_lost'];\nconst isConnectionLost = minutesSinceUpdate > 15;\n\n// Проверяем mute_until для потери связи\nconst isConnectionLostMuted = connectionLostState && connectionLostState.mute_until && new Date(connectionLostState.mute_until) > new Date();\nconst isConnectionLostAcknowledged = connectionLostState && connectionLostState.acknowledged_at;\n\nif (isConnectionLost && !isConnectionLostAcknowledged && !isConnectionLostMuted) {\n  alerts.push({\n    alert_type: 'esp32_connection_lost',\n    message: '🔴 КРИТИЧНО! Потеряна связь с ESP32',\n    field: 'connection',\n    current_value: minutesSinceUpdate,\n    threshold_max: 15,\n    timestamp: reading.timestamp_iso,\n    is_new: !connectionLostState || !connectionLostState.is_active,\n    // Включаем readings для следующих нод\n    readings: reading\n  });\n} else if (!isConnectionLost && connectionLostState && (connectionLostState.is_active || connectionLostState.acknowledged_at)) {\n  // Связь восстановлена И НЕ подтверждено - деактивируем оповещение\n  alerts.push({\n    alert_type: 'esp32_connection_lost',\n    action: 'deactivate'\n  });\n}\n\n// Проверяем каждое условие\nfor (const [alertType, config] of Object.entries(thresholds)) {\n  const value = parseFloat(reading[config.field]) || 0;\n  const state = statesMap[alertType];\n  \n  let isCritical = false;\n  \n  // Проверяем пороги\n  if (config.max !== undefined && value > config.max) {\n    isCritical = true;\n  }\n  if (config.min !== undefined && value < config.min) {\n    isCritical = true;\n  }\n  \n  // Проверяем mute_until (если отключено на время)\n  const isMuted = state && state.mute_until && new Date(state.mute_until) > new Date();\n  \n  // Проверяем подтверждение - если подтверждено, не отправляем\n  const isAcknowledged = state && state.acknowledged_at;\n  \n  // Если критично И НЕ подтверждено И НЕ отключено - отправляем\n  if (isCritical && !isAcknowledged && !isMuted) {\n    alerts.push({\n      alert_type: alertType,\n      message: config.message,\n      field: config.field,\n      current_value: value,\n      threshold_min: config.min,\n      threshold_max: config.max,\n      timestamp: reading.timestamp_iso,\n      is_new: !state || !state.is_active,\n      // Включаем readings для следующих нод\n      readings: reading\n    });\n  }\n  \n  // Если не критично но оповещение активно И НЕ подтверждено - деактивируем\n  if (!isCritical && state && (state.is_active || state.acknowledged_at)) {\n    alerts.push({\n      alert_type: alertType,\n      action: 'deactivate'\n    });\n  }\n}\n\nif (alerts.length === 0) {\n  // Нет оповещений\n  return [];\n}\n\nreturn alerts.map(a => ({ json: a }));"
+        "jsCode": "// После Merge каждый item содержит readings + state\nconst items = $input.all();\n\n// Readings берем из первого item (они одинаковые во всех)\nconst firstItem = items[0].json;\nconst reading = {\n  outdoor_temperature: firstItem.outdoor_temperature,\n  outdoor_humidity: firstItem.outdoor_humidity,\n  water_level: firstItem.water_level,\n  timestamp_iso: firstItem.timestamp_iso,\n  received_at: firstItem.received_at\n};\n\n// States извлекаем из каждого item\nconst states = items.map(item => ({\n  alert_type: item.json.alert_type,\n  is_active: item.json.is_active,\n  acknowledged_at: item.json.acknowledged_at,\n  mute_until: item.json.mute_until\n}));\n\n// Преобразуем в map для быстрого доступа\nconst statesMap = {};\nstates.forEach(s => {\n  if (s.alert_type) {\n    statesMap[s.alert_type] = s;\n  }\n});\n\n// Пороговые значения\nconst thresholds = {\n  high_temperature: { field: 'outdoor_temperature', max: 35, message: '🔥 КРИТИЧНО! Температура слишком высокая' },\n  low_temperature: { field: 'outdoor_temperature', min: 18, message: '❄️ КРИТИЧНО! Температура слишком низкая' },\n  high_humidity: { field: 'outdoor_humidity', max: 85, message: '💧 КРИТИЧНО! Влажность слишком высокая' },\n  low_humidity: { field: 'outdoor_humidity', min: 20, message: '🏜️ КРИТИЧНО! Влажность слишком низкая' },\n  low_water_level: { field: 'water_level', min: 5, message: '🚨 КРИТИЧНО! Уровень воды очень низкий!' }\n};\n\nconst alerts = [];\n\n// Проверка на потерю связи с ESP32\nconst lastUpdateTime = new Date(reading.received_at || reading.timestamp_iso).getTime();\nconst currentTime = new Date().getTime();\nconst minutesSinceUpdate = Math.floor((currentTime - lastUpdateTime) / 1000 / 60);\n\nconst connectionLostState = statesMap['esp32_connection_lost'];\nconst isConnectionLost = minutesSinceUpdate > 15;\n\n// Проверяем mute_until для потери связи\nconst isConnectionLostMuted = connectionLostState && connectionLostState.mute_until && new Date(connectionLostState.mute_until) > new Date();\nconst isConnectionLostAcknowledged = connectionLostState && connectionLostState.acknowledged_at;\n\nif (isConnectionLost && !isConnectionLostAcknowledged && !isConnectionLostMuted) {\n  alerts.push({\n    alert_type: 'esp32_connection_lost',\n    message: '🔴 КРИТИЧНО! Потеряна связь с ESP32',\n    field: 'connection',\n    current_value: minutesSinceUpdate,\n    threshold_max: 15,\n    timestamp: reading.timestamp_iso,\n    is_new: !connectionLostState || !connectionLostState.is_active,\n    readings: reading\n  });\n} else if (!isConnectionLost && connectionLostState && (connectionLostState.is_active || connectionLostState.acknowledged_at)) {\n  alerts.push({\n    alert_type: 'esp32_connection_lost',\n    action: 'deactivate'\n  });\n}\n\n// Проверяем каждое условие\nfor (const [alertType, config] of Object.entries(thresholds)) {\n  const value = parseFloat(reading[config.field]) || 0;\n  const state = statesMap[alertType];\n  \n  let isCritical = false;\n  \n  if (config.max !== undefined && value > config.max) {\n    isCritical = true;\n  }\n  if (config.min !== undefined && value < config.min) {\n    isCritical = true;\n  }\n  \n  const isMuted = state && state.mute_until && new Date(state.mute_until) > new Date();\n  const isAcknowledged = state && state.acknowledged_at;\n  \n  if (isCritical && !isAcknowledged && !isMuted) {\n    alerts.push({\n      alert_type: alertType,\n      message: config.message,\n      field: config.field,\n      current_value: value,\n      threshold_min: config.min,\n      threshold_max: config.max,\n      timestamp: reading.timestamp_iso,\n      is_new: !state || !state.is_active,\n      readings: reading\n    });\n  }\n  \n  if (!isCritical && state && (state.is_active || state.acknowledged_at)) {\n    alerts.push({\n      alert_type: alertType,\n      action: 'deactivate'\n    });\n  }\n}\n\nif (alerts.length === 0) {\n  return [];\n}\n\nreturn alerts.map(a => ({ json: a }));"
       },
       "id": "check-thresholds",
       "name": "Проверка Порогов",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [
+        900,
+        300
+      ]
     },
     {
       "parameters": {
@@ -80,17 +92,23 @@
       "name": "Только Активные",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1120, 300]
+      "position": [
+        1120,
+        300
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const alert = $input.first().json;\n\n// Если нет message - это deactivate объект, пропускаем\nif (!alert.message) {\n  return [];\n}\n\n// Readings передаются вместе с alert\nconst reading = alert.readings;\n\n// Безопасное получение current_value с fallback\nconst currentValue = parseFloat(alert.current_value) || 0;\n\nlet message = '';\n\n// Специальное форматирование для потери связи\nif (alert.alert_type === 'esp32_connection_lost') {\n  const minutesSinceUpdate = Math.floor(currentValue);\n  message = `${alert.message}\\n\\n`;\n  message += `⏱️ *Время с последнего обновления:* ${minutesSinceUpdate} мин\\n`;\n  message += `⚠️ *Критично после:* ${alert.threshold_max} мин\\n`;\n  message += `\\n🕒 *Последнее обновление:* ${new Date(alert.timestamp * 1000).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}\\n`;\n  message += `\\n━━━━━━━━━━━━━━━━━━━━━\\n`;\n  message += `\\n📋 *ПОСЛЕДНИЕ ПОКАЗАТЕЛИ:*\\n`;\n  message += `🌡️ Температура: ${parseFloat(reading.temperature).toFixed(1)}°C\\n`;\n  message += `💧 Влажность: ${parseFloat(reading.humidity).toFixed(1)}%\\n`;\n  message += `💦 Уровень воды: ${parseFloat(reading.water_level).toFixed(1)}%\\n`;\n  message += `💨 Ветер: ${parseFloat(reading.wind_speed).toFixed(1)} м/с\\n`;\n  message += `\\n⚠️ *Проверьте ESP32 и подключение к интернету!*`;\n} else {\n  // Обычное форматирование для других оповещений\n  message = `${alert.message}\\n\\n`;\n  message += `📊 *Текущее значение:* ${currentValue.toFixed(1)}\\n`;\n  \n  if (alert.threshold_min !== undefined) {\n    message += `⚠️ *Минимум:* ${alert.threshold_min}\\n`;\n  }\n  if (alert.threshold_max !== undefined) {\n    message += `⚠️ *Максимум:* ${alert.threshold_max}\\n`;\n  }\n  \n  message += `\\n🕒 *Время:* ${new Date(alert.timestamp * 1000).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}\\n`;\n  message += `\\n━━━━━━━━━━━━━━━━━━━━━\\n`;\n  message += `\\n📋 *ВСЕ ПОКАЗАТЕЛИ:*\\n`;\n  message += `🌡️ Температура: ${parseFloat(reading.temperature).toFixed(1)}°C\\n`;\n  message += `💧 Влажность: ${parseFloat(reading.humidity).toFixed(1)}%\\n`;\n  message += `💦 Уровень воды: ${parseFloat(reading.water_level).toFixed(1)}%\\n`;\n  message += `💨 Ветер: ${parseFloat(reading.wind_speed).toFixed(1)} м/с\\n`;\n}\n\nreturn [{\n  json: {\n    message: message,\n    alert_type: alert.alert_type,\n    current_value: currentValue,\n    is_new: alert.is_new\n  }\n}];"
+        "jsCode": "const alert = $input.first().json;\n\n// Если нет message - это deactivate объект, пропускаем\nif (!alert.message) {\n  return [];\n}\n\n// Readings передаются вместе с alert\nconst reading = alert.readings;\n\nconst currentValue = parseFloat(alert.current_value) || 0;\n\nlet message = '';\n\n// Специальное форматирование для потери связи\nif (alert.alert_type === 'esp32_connection_lost') {\n  const minutesSinceUpdate = Math.floor(currentValue);\n  message = `${alert.message}\\n\\n`;\n  message += `⏱️ *Время с последнего обновления:* ${minutesSinceUpdate} мин\\n`;\n  message += `⚠️ *Критично после:* ${alert.threshold_max} мин\\n`;\n  message += `\\n🕒 *Последнее обновление:* ${new Date(alert.timestamp * 1000).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}\\n`;\n  message += `\\n━━━━━━━━━━━━━━━━━━━━━\\n`;\n  message += `\\n📋 *ПОСЛЕДНИЕ ПОКАЗАТЕЛИ:*\\n`;\n  message += `🌡️ Температура: ${parseFloat(reading.outdoor_temperature).toFixed(1)}°C\\n`;\n  message += `💧 Влажность: ${parseFloat(reading.outdoor_humidity).toFixed(1)}%\\n`;\n  message += `💦 Уровень воды: ${parseFloat(reading.water_level).toFixed(1)}%\\n`;\n  message += `\\n⚠️ *Проверьте ESP32 и подключение к интернету!*`;\n} else {\n  message = `${alert.message}\\n\\n`;\n  message += `📊 *Текущее значение:* ${currentValue.toFixed(1)}\\n`;\n  \n  if (alert.threshold_min !== undefined) {\n    message += `⚠️ *Минимум:* ${alert.threshold_min}\\n`;\n  }\n  if (alert.threshold_max !== undefined) {\n    message += `⚠️ *Максимум:* ${alert.threshold_max}\\n`;\n  }\n  \n  message += `\\n🕒 *Время:* ${new Date(alert.timestamp * 1000).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}\\n`;\n  message += `\\n━━━━━━━━━━━━━━━━━━━━━\\n`;\n  message += `\\n📋 *ВСЕ ПОКАЗАТЕЛИ:*\\n`;\n  message += `🌡️ Температура: ${parseFloat(reading.outdoor_temperature).toFixed(1)}°C\\n`;\n  message += `💧 Влажность: ${parseFloat(reading.outdoor_humidity).toFixed(1)}%\\n`;\n  message += `💦 Уровень воды: ${parseFloat(reading.water_level).toFixed(1)}%\\n`;\n}\n\nreturn [{\n  json: {\n    message: message,\n    alert_type: alert.alert_type,\n    current_value: currentValue,\n    is_new: alert.is_new\n  }\n}];"
       },
       "id": "format-alert",
       "name": "Форматировать Оповещение",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1340, 200]
+      "position": [
+        1340,
+        200
+      ]
     },
     {
       "parameters": {
@@ -100,7 +118,10 @@
       "name": "Подготовить Telegram Запрос",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, 200]
+      "position": [
+        1560,
+        200
+      ]
     },
     {
       "parameters": {
@@ -117,7 +138,10 @@
       "name": "Отправить Оповещение",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1780, 200],
+      "position": [
+        1780,
+        200
+      ],
       "credentials": {
         "telegramApi": {
           "id": "telegram_bot",
@@ -133,7 +157,10 @@
       "name": "Подготовить SQL Обновления",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2000, 200]
+      "position": [
+        2000,
+        200
+      ]
     },
     {
       "parameters": {
@@ -145,7 +172,10 @@
       "name": "Обновить Состояние",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [2220, 200],
+      "position": [
+        2220,
+        200
+      ],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -161,7 +191,10 @@
       "name": "Подготовить SQL Деактивации",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1340, 400]
+      "position": [
+        1340,
+        400
+      ]
     },
     {
       "parameters": {
@@ -173,7 +206,10 @@
       "name": "Деактивировать Оповещение",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1560, 400],
+      "position": [
+        1560,
+        400
+      ],
       "credentials": {
         "postgres": {
           "id": "greenhouse_db",
@@ -190,7 +226,10 @@
       "name": "Объединить Readings и States",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 2.1,
-      "position": [790, 300]
+      "position": [
+        790,
+        300
+      ]
     }
   ],
   "connections": {
